@@ -1,0 +1,54 @@
+name: milk_delivery
+description: Milk delivery management app for milkmen and their subscribers.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Local storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.3
+
+  # Backend (Firebase) — uncomment after dropping in google-services.json /
+  # GoogleService-Info.plist (see README "Backend wiring"). Left disabled by
+  # default so the app builds out of the box without Firebase configuration.
+  # firebase_core: ^2.31.0
+  # firebase_auth: ^4.19.5
+  # cloud_firestore: ^4.17.3
+  # firebase_messaging: ^14.9.2
+
+  # Utilities
+  url_launcher: ^6.2.6
+  intl: ^0.19.0
+  uuid: ^4.4.0
+  connectivity_plus: ^6.0.3
+  collection: ^1.18.0
+
+  # PDF / share
+  pdf: ^3.11.0
+  printing: ^5.13.0
+  share_plus: ^9.0.0
+
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/seed/

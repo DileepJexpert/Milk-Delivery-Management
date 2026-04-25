@@ -83,7 +83,15 @@ class AppLocalizations {
       'monthly_summary': 'Monthly Summary',
       'flat_detail': 'Flat detail',
       'logged_in_as': 'Signed in as',
-      'unlinked_subscriber': 'No flat linked yet. Ask your milkman to register your flat with this phone number.',
+      'unlinked_subscriber': 'No flat is registered for your phone yet.',
+      'unlinked_explainer':
+          'Your milkman needs to add a flat with this phone number as the owner. Share the number below with them, then sign back in.',
+      'your_phone': 'Your phone',
+      'copy': 'Copy',
+      'copied': 'Copied to clipboard',
+      'try_demo': 'Or try a demo account',
+      'demo_subscriber_hint':
+          'Sign out and sign in with 9111111111 or 9222222222 (OTP 123456) — both have flats already linked.',
       'today_label': 'Today',
       'yesterday_label': 'Yesterday',
       'no_deliveries_today': 'No deliveries scheduled for today.',
@@ -164,7 +172,15 @@ class AppLocalizations {
       'monthly_summary': 'महीने का सारांश',
       'flat_detail': 'फ्लैट विवरण',
       'logged_in_as': 'साइन इन',
-      'unlinked_subscriber': 'अभी कोई फ्लैट लिंक नहीं है। कृपया अपने दूधवाले से इस नंबर पर फ्लैट रजिस्टर कराएँ।',
+      'unlinked_subscriber': 'इस नंबर पर अभी कोई फ्लैट रजिस्टर नहीं है।',
+      'unlinked_explainer':
+          'आपके दूधवाले को इस फ़ोन नंबर के मालिक के रूप में फ्लैट जोड़ना होगा। नीचे का नंबर उन्हें दें, फिर दोबारा साइन इन करें।',
+      'your_phone': 'आपका फ़ोन',
+      'copy': 'कॉपी करें',
+      'copied': 'क्लिपबोर्ड पर कॉपी हो गया',
+      'try_demo': 'या डेमो अकाउंट आज़माएँ',
+      'demo_subscriber_hint':
+          'साइन आउट करके 9111111111 या 9222222222 (OTP 123456) से साइन इन करें — दोनों के फ्लैट पहले से लिंक हैं।',
       'today_label': 'आज',
       'yesterday_label': 'कल',
       'no_deliveries_today': 'आज कोई डिलीवरी नहीं है।',

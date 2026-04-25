@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/localization/app_localizations.dart';
@@ -28,18 +29,67 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
     if (flat == null) {
       return Scaffold(
         appBar: AppBar(title: Text(t.t('app_title')), actions: _actions(context)),
-        body: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: ListView(
               children: [
-                const Icon(Icons.link_off, size: 56),
-                const SizedBox(height: 12),
-                Text(t.t('unlinked_subscriber'),
-                    textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                const Icon(Icons.link_off, size: 64, color: Colors.orange),
                 const SizedBox(height: 16),
-                Text('${t.t('logged_in_as')}: ${user?.phone ?? ''}'),
+                Text(
+                  t.t('unlinked_subscriber'),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  t.t('unlinked_explainer'),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 24),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Text(t.t('your_phone'),
+                            style: Theme.of(context).textTheme.labelLarge),
+                        const SizedBox(height: 4),
+                        SelectableText(
+                          user?.phone ?? '',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: user == null
+                              ? null
+                              : () async {
+                                  await Clipboard.setData(
+                                      ClipboardData(text: user.phone));
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content: Text(t.t('copied'))),
+                                    );
+                                  }
+                                },
+                          icon: const Icon(Icons.copy),
+                          label: Text(t.t('copy')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(t.t('try_demo'),
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(t.t('demo_subscriber_hint')),
               ],
             ),
           ),

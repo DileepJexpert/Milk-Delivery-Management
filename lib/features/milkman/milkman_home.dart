@@ -7,6 +7,7 @@ import '../../providers/data_providers.dart';
 import '../auth/session_controller.dart';
 import 'billing/billing_screen.dart';
 import 'inbox/change_requests_screen.dart';
+import 'profile/milkman_profile_screen.dart';
 import 'societies/societies_screen.dart';
 import 'todays_route/todays_route_screen.dart';
 
@@ -42,6 +43,9 @@ class _MilkmanHomeState extends ConsumerState<MilkmanHome> {
           orElse: () => 0,
         );
 
+    final initial =
+        (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : '?';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(titles[_index]),
@@ -52,18 +56,32 @@ class _MilkmanHomeState extends ConsumerState<MilkmanHome> {
             onPressed: () =>
                 ref.read(localeControllerProvider.notifier).toggle(),
           ),
-          PopupMenuButton<String>(
-            onSelected: (v) async {
-              if (v == 'logout') {
-                await ref.read(sessionControllerProvider.notifier).signOut();
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'logout',
-                child: Text('${t.t('logout')} (${user?.name ?? ''})'),
+          // Tap avatar → full profile screen
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const MilkmanProfileScreen(),
+                ),
               ),
-            ],
+              child: Tooltip(
+                message: '${user?.name ?? ''} · ${user?.phone ?? ''}',
+                child: CircleAvatar(
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  child: Text(
+                    initial,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),

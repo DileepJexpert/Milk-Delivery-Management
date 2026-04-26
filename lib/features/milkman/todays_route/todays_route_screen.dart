@@ -127,7 +127,6 @@ class _DeliveryRow extends ConsumerWidget {
     final status = row?.status ?? DeliveryStatus.pending;
     final qty = row?.actualQuantity ?? 0;
     final planned = row?.plannedQuantity ?? flat.defaultQuantity;
-    final actor = ref.read(sessionControllerProvider).user!;
     final repo = ref.read(deliveryRepositoryProvider);
 
     return InkWell(
@@ -167,14 +166,26 @@ class _DeliveryRow extends ConsumerWidget {
               ),
               onPressed: row == null
                   ? null
-                  : () => repo.markDelivered(row!, actor),
+                  : () {
+                      final actor =
+                          ref.read(sessionControllerProvider).user;
+                      if (actor == null) return;
+                      repo.markDelivered(row!, actor);
+                    },
               icon: const Icon(Icons.check),
               label: Text(t.t('mark_delivered')),
             ),
             const SizedBox(width: 6),
             IconButton.filledTonal(
               tooltip: t.t('mark_skipped'),
-              onPressed: row == null ? null : () => repo.markSkipped(row!, actor),
+              onPressed: row == null
+                  ? null
+                  : () {
+                      final actor =
+                          ref.read(sessionControllerProvider).user;
+                      if (actor == null) return;
+                      repo.markSkipped(row!, actor);
+                    },
               icon: const Icon(Icons.cancel_outlined),
             ),
             const SizedBox(width: 4),

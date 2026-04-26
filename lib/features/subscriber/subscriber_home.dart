@@ -25,6 +25,10 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
     final t = AppLocalizations.of(context);
     final flat = ref.watch(myFlatProvider);
     final user = ref.watch(sessionControllerProvider).user;
+    // After signOut(), user is briefly null before MaterialApp swaps the
+    // home widget to LoginScreen. Bail out so we don't render the
+    // unlinked-subscriber screen for one frame mid-logout.
+    if (user == null) return const Scaffold(body: SizedBox.shrink());
 
     if (flat == null) {
       return Scaffold(

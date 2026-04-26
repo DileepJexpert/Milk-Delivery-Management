@@ -25,6 +25,11 @@ class _MilkmanHomeState extends ConsumerState<MilkmanHome> {
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
     final user = ref.watch(sessionControllerProvider).user;
+    // After signOut(), session.user is briefly null before MaterialApp
+    // swaps the home widget to LoginScreen. Bail out here so the inner
+    // tab screens (which use `user!`) don't rebuild against a null user
+    // and trigger a cascade of layout / null-assertion failures.
+    if (user == null) return const Scaffold(body: SizedBox.shrink());
     final pages = const [
       TodaysRouteScreen(),
       SocietiesScreen(),

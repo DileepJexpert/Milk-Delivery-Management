@@ -5,7 +5,7 @@ import '../local/local_store.dart';
 import '../local/sync_queue.dart';
 import '../models/audit_log.dart';
 import '../models/daily_delivery.dart';
-import '../models/flat.dart';
+import '../models/flat.dart' show Flat, FlatStatus;
 import '../models/user.dart';
 import 'audit_repository.dart';
 import 'flat_repository.dart';
@@ -52,8 +52,9 @@ class DeliveryRepository {
           .toList()
         ..sort((a, b) => b.dateKey.compareTo(a.dateKey));
 
-  /// Returns the existing delivery for [flatId]/[dateKey], or seeds a new
-  /// pending one based on the flat's default quantity.
+  /// Returns the existing delivery for [flatId]/[dateKey], or seeds a new row.
+  /// Stopped flats get a paused row without persisting (they're not on route).
+  /// Flat-level paused flats get a persisted paused row.
   DailyDelivery ensureForToday(Flat flat, {DateTime? when}) {
     final date = when ?? AppDates.today();
     final key = AppDates.dateKey(date);
@@ -63,22 +64,30 @@ class DeliveryRepository {
         .where((d) => d.flatId == flat.id && d.dateKey == key)
         .toList();
     if (existing.isNotEmpty) return existing.first;
+    final status = flat.status == FlatStatus.active
+        ? DeliveryStatus.pending
+        : DeliveryStatus.paused;
     final fresh = DailyDelivery(
       id: _uuid.v4(),
       flatId: flat.id,
       dateKey: key,
       plannedQuantity: flat.defaultQuantity,
       actualQuantity: 0,
-      status: DeliveryStatus.pending,
+      status: status,
     );
-    LocalStore.instance.deliveries.put(fresh.id, fresh.toJson());
+    // Don't persist a delivery row for permanently stopped flats.
+    if (flat.status != FlatStatus.stopped) {
+      LocalStore.instance.deliveries.put(fresh.id, fresh.toJson());
+    }
     return fresh;
   }
 
   /// Ensure today's delivery rows exist for the entire route.
+  /// Stopped flats are excluded entirely.
   Future<List<DailyDelivery>> ensureRouteForToday(List<Flat> flats) async {
     final out = <DailyDelivery>[];
     for (final f in flats) {
+      if (f.status == FlatStatus.stopped) continue;
       out.add(ensureForToday(f));
     }
     return out;

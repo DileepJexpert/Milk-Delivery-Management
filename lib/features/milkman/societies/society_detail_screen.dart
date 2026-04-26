@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/localization/app_localizations.dart';
+import '../../../data/models/flat.dart';
 import '../../../providers/data_providers.dart';
 import '../../../providers/repository_providers.dart';
+import '../../auth/session_controller.dart';
 import '../flats/flat_detail_screen.dart';
 
 class SocietyDetailScreen extends ConsumerWidget {
@@ -26,32 +28,25 @@ class SocietyDetailScreen extends ConsumerWidget {
           if (rows.isEmpty) {
             return Center(child: Text(t.t('no_flats')));
           }
-          return ListView.separated(
+          final active = rows.where((f) => f.status != FlatStatus.stopped).toList();
+          final stopped = rows.where((f) => f.status == FlatStatus.stopped).toList();
+          return ListView(
             padding: const EdgeInsets.all(12),
-            itemCount: rows.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) {
-              final f = rows[i];
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(child: Text(f.flatNumber.substring(0, 1))),
-                  title: Text(
-                    'Flat ${f.flatNumber} · ${f.ownerName}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    '${f.ownerPhone} · ${f.defaultQuantity}L/day · ₹${f.pricePerLitre.toStringAsFixed(0)}/L'
-                    '${f.hasApp ? ' · app' : ''}',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => FlatDetailScreen(flatId: f.id),
-                    ),
+            children: [
+              for (final f in active) _FlatTile(f: f),
+              if (stopped.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+                  child: Text(
+                    t.t('stopped_flats'),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
                   ),
                 ),
-              );
-            },
+                for (final f in stopped) _FlatTile(f: f),
+              ],
+            ],
           );
         },
       ),
@@ -130,6 +125,7 @@ class SocietyDetailScreen extends ConsumerWidget {
       ),
     );
     if (ok == true && flatNo.text.trim().isNotEmpty) {
+      final actor = ref.read(sessionControllerProvider).user;
       await ref.read(flatRepositoryProvider).create(
             societyId: societyId,
             flatNumber: flatNo.text.trim(),
@@ -138,7 +134,89 @@ class SocietyDetailScreen extends ConsumerWidget {
             hasApp: hasApp,
             defaultQuantity: double.tryParse(qty.text) ?? 1.0,
             pricePerLitre: double.tryParse(price.text) ?? 60.0,
+            actor: actor,
           );
     }
+  }
+}
+
+class _FlatTile extends StatelessWidget {
+  const _FlatTile({required this.f});
+  final Flat f;
+
+  @override
+  Widget build(BuildContext context) {
+    final isStopped = f.status == FlatStatus.stopped;
+    final isPaused = f.status == FlatStatus.paused;
+
+    Color? chipColor;
+    String chipLabel;
+    if (isStopped) {
+      chipColor = Colors.grey;
+      chipLabel = AppLocalizations.of(context).t('flat_status_stopped');
+    } else if (isPaused) {
+      chipColor = Colors.orange;
+      chipLabel = AppLocalizations.of(context).t('flat_status_paused');
+    } else {
+      chipColor = Colors.green;
+      chipLabel = AppLocalizations.of(context).t('flat_status_active');
+    }
+
+    return Opacity(
+      opacity: isStopped ? 0.55 : 1.0,
+      child: Card(
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: isStopped
+                ? Colors.grey.shade300
+                : isPaused
+                    ? Colors.orange.shade100
+                    : null,
+            child: Text(f.flatNumber.substring(0, 1)),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Flat ${f.flatNumber} · ${f.ownerName}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    decoration: isStopped ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: chipColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: chipColor.withOpacity(0.5)),
+                ),
+                child: Text(
+                  chipLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: chipColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Text(
+            '${f.ownerPhone} · ${f.defaultQuantity}L/day · '
+            '₹${f.pricePerLitre.toStringAsFixed(0)}/L'
+            '${f.hasApp ? " · app" : ""}',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => FlatDetailScreen(flatId: f.id),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

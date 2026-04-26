@@ -38,8 +38,10 @@ class TodaysRouteScreen extends ConsumerWidget {
       return Center(child: Text(t.t('no_flats')));
     }
 
+
     final rowsByFlat = {for (final r in rows) r.flatId: r};
-    final grouped = groupBy(flats, (f) => f.societyId);
+    final activeFlats = flats.where((f) => f.status != FlatStatus.stopped).toList();
+    final grouped = groupBy(activeFlats, (f) => f.societyId);
     final isOffToday = ref.watch(isMilkmanAbsentTodayProvider);
 
     return ListView(

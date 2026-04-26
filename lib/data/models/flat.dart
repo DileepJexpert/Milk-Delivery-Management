@@ -1,3 +1,5 @@
+enum FlatStatus { active, paused, stopped }
+
 class Flat {
   Flat({
     required this.id,
@@ -8,6 +10,7 @@ class Flat {
     required this.hasApp,
     required this.defaultQuantity,
     required this.pricePerLitre,
+    this.status = FlatStatus.active,
   });
 
   final String id;
@@ -18,6 +21,7 @@ class Flat {
   final bool hasApp;
   final double defaultQuantity;
   final double pricePerLitre;
+  final FlatStatus status;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -28,6 +32,7 @@ class Flat {
         'hasApp': hasApp,
         'defaultQuantity': defaultQuantity,
         'pricePerLitre': pricePerLitre,
+        'status': status.name,
       };
 
   factory Flat.fromJson(Map json) => Flat(
@@ -39,6 +44,10 @@ class Flat {
         hasApp: json['hasApp'] as bool? ?? false,
         defaultQuantity: (json['defaultQuantity'] as num).toDouble(),
         pricePerLitre: (json['pricePerLitre'] as num).toDouble(),
+        status: FlatStatus.values.firstWhere(
+          (s) => s.name == (json['status'] as String? ?? ''),
+          orElse: () => FlatStatus.active,
+        ),
       );
 
   Flat copyWith({
@@ -48,6 +57,7 @@ class Flat {
     bool? hasApp,
     double? defaultQuantity,
     double? pricePerLitre,
+    FlatStatus? status,
   }) =>
       Flat(
         id: id,
@@ -58,5 +68,6 @@ class Flat {
         hasApp: hasApp ?? this.hasApp,
         defaultQuantity: defaultQuantity ?? this.defaultQuantity,
         pricePerLitre: pricePerLitre ?? this.pricePerLitre,
+        status: status ?? this.status,
       );
 }

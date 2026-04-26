@@ -11,8 +11,9 @@ import '../data/repositories/society_repository.dart';
 final societyRepositoryProvider =
     Provider<SocietyRepository>((_) => SocietyRepository());
 
-final flatRepositoryProvider =
-    Provider<FlatRepository>((_) => FlatRepository());
+final flatRepositoryProvider = Provider<FlatRepository>(
+  (ref) => FlatRepository(ref.read(auditRepositoryProvider)),
+);
 
 final auditRepositoryProvider =
     Provider<AuditRepository>((_) => AuditRepository());

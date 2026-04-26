@@ -24,7 +24,11 @@ class AppTheme {
       visualDensity: VisualDensity.adaptivePlatformDensity,
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(56),
+          // Min width 64 (Material default) avoids the infinite-width pitfall
+          // of Size.fromHeight, which makes the button demand infinite width
+          // and crash inside a Row alongside Expanded. Wrap in a SizedBox to
+          // get full-width buttons in column layouts.
+          minimumSize: const Size(64, 56),
           textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -33,7 +37,7 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size(64, 52),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),

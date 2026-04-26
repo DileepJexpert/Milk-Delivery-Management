@@ -75,12 +75,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 12),
               if (!_otpSent)
-                FilledButton(
-                  onPressed: () {
-                    if (_phone.text.trim().isEmpty) return;
-                    setState(() => _otpSent = true);
-                  },
-                  child: Text(t.t('send_otp')),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      if (_phone.text.trim().isEmpty) return;
+                      setState(() => _otpSent = true);
+                    },
+                    child: Text(t.t('send_otp')),
+                  ),
                 )
               else ...[
                 TextField(
@@ -116,7 +119,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onSelectionChanged: (s) => setState(() => _role = s.first),
                 ),
                 const SizedBox(height: 20),
-                FilledButton(onPressed: _verify, child: Text(t.t('verify'))),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                      onPressed: _verify, child: Text(t.t('verify'))),
+                ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Text(_error!, style: const TextStyle(color: Colors.red)),

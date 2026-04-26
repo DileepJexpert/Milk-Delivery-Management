@@ -54,7 +54,9 @@ class _MilkmanProfileScreenState extends ConsumerState<MilkmanProfileScreen> {
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
     final user = ref.watch(sessionControllerProvider).user;
-    if (user == null) return const SizedBox.shrink();
+    // After signOut, the route can briefly rebuild before the navigator pops.
+    // Return an empty Scaffold so layout constraints are satisfied.
+    if (user == null) return const Scaffold(body: SizedBox.shrink());
 
     final scheme = Theme.of(context).colorScheme;
 
@@ -222,9 +224,12 @@ class _MilkmanProfileScreenState extends ConsumerState<MilkmanProfileScreen> {
           // Logout
           OutlinedButton.icon(
             onPressed: () async {
-              await ref
-                  .read(sessionControllerProvider.notifier)
-                  .signOut();
+              // Pop this route before clearing the session so the home widget
+              // can swap to LoginScreen cleanly without an orphaned profile
+              // screen on the navigator stack.
+              final notifier = ref.read(sessionControllerProvider.notifier);
+              Navigator.of(context).pop();
+              await notifier.signOut();
             },
             icon: const Icon(Icons.logout),
             label: Text(t.t('logout')),

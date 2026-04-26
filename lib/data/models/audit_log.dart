@@ -7,6 +7,8 @@ enum AuditChangeType {
   flatUpdated,
   changeRequestCreated,
   changeRequestApplied,
+  milkmanAbsenceAdded,
+  milkmanAbsenceRemoved,
 }
 
 class AuditLog {

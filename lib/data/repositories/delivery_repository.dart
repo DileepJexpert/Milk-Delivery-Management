@@ -108,6 +108,8 @@ class DeliveryRepository {
     return updated;
   }
 
+  /// Milkman skipped this flat during the round (one-off, neither subscriber
+  /// pause nor planned absence).
   Future<DailyDelivery> markSkipped(
     DailyDelivery row,
     AppUser actor, {
@@ -130,6 +132,71 @@ class DeliveryRepository {
     return updated;
   }
 
+  /// Subscriber asked to pause delivery for this date.
+  Future<DailyDelivery> markPaused(
+    DailyDelivery row,
+    AppUser actor, {
+    String? reason,
+  }) async {
+    final updated = row.copyWith(
+      status: DeliveryStatus.paused,
+      actualQuantity: 0,
+      deliveredAt: null,
+    );
+    await _persist(updated);
+    await _audit.log(
+      flatId: row.flatId,
+      actor: actor,
+      type: AuditChangeType.paused,
+      oldValue: '${row.status.name} ${row.actualQuantity}L',
+      newValue: '${updated.status.name} 0L',
+      reason: reason,
+    );
+    return updated;
+  }
+
+  /// Milkman is off (sick / holiday / weekly off). These days do NOT count
+  /// toward the bill.
+  Future<DailyDelivery> markAbsent(
+    DailyDelivery row,
+    AppUser actor, {
+    String? reason,
+  }) async {
+    final updated = row.copyWith(
+      status: DeliveryStatus.milkmanAbsent,
+      actualQuantity: 0,
+      deliveredAt: null,
+    );
+    await _persist(updated);
+    await _audit.log(
+      flatId: row.flatId,
+      actor: actor,
+      type: AuditChangeType.milkmanAbsenceAdded,
+      oldValue: '${row.status.name} ${row.actualQuantity}L',
+      newValue: '${updated.status.name} 0L',
+      reason: reason,
+    );
+    return updated;
+  }
+
+  /// Reset a delivery row to pending (used when an absence is cancelled).
+  Future<DailyDelivery> markPending(DailyDelivery row, AppUser actor) async {
+    final updated = row.copyWith(
+      status: DeliveryStatus.pending,
+      actualQuantity: 0,
+      deliveredAt: null,
+    );
+    await _persist(updated);
+    await _audit.log(
+      flatId: row.flatId,
+      actor: actor,
+      type: AuditChangeType.milkmanAbsenceRemoved,
+      oldValue: '${row.status.name} ${row.actualQuantity}L',
+      newValue: 'pending',
+    );
+    return updated;
+  }
+
   Future<DailyDelivery> setQuantity(
     DailyDelivery row,
     AppUser actor,
@@ -138,7 +205,8 @@ class DeliveryRepository {
   }) async {
     final updated = row.copyWith(
       plannedQuantity: qty,
-      actualQuantity: row.status == DeliveryStatus.delivered ? qty : row.actualQuantity,
+      actualQuantity:
+          row.status == DeliveryStatus.delivered ? qty : row.actualQuantity,
     );
     await _persist(updated);
     await _audit.log(
@@ -157,7 +225,8 @@ class DeliveryRepository {
     await SyncQueue.instance.enqueue('upsert', 'deliveries', d.toJson());
   }
 
-  /// Aggregate one flat's monthly numbers.
+  /// Aggregate one flat's monthly numbers, broken into the three billing
+  /// buckets the spec asks for.
   MonthlySummary summary(String flatId, DateTime month) {
     final flat = _flats.byId(flatId);
     if (flat == null) {
@@ -170,9 +239,10 @@ class DeliveryRepository {
         .where((d) => d.flatId == flatId && d.dateKey.startsWith(prefix))
         .toList();
     double totalLitres = 0;
-    int skipped = 0;
-    int custom = 0;
     int delivered = 0;
+    int custom = 0;
+    int subscriberPaused = 0;
+    int milkmanAbsent = 0;
     for (final r in rows) {
       switch (r.status) {
         case DeliveryStatus.delivered:
@@ -180,9 +250,12 @@ class DeliveryRepository {
           delivered++;
           if (r.actualQuantity != flat.defaultQuantity) custom++;
           break;
-        case DeliveryStatus.skipped:
         case DeliveryStatus.paused:
-          skipped++;
+        case DeliveryStatus.skipped:
+          subscriberPaused++;
+          break;
+        case DeliveryStatus.milkmanAbsent:
+          milkmanAbsent++;
           break;
         case DeliveryStatus.pending:
           break;
@@ -192,7 +265,8 @@ class DeliveryRepository {
       flatId: flatId,
       monthKey: prefix,
       totalLitres: totalLitres,
-      daysSkipped: skipped,
+      daysSubscriberPaused: subscriberPaused,
+      daysMilkmanAbsent: milkmanAbsent,
       daysCustom: custom,
       daysDelivered: delivered,
       amountDue: totalLitres * flat.pricePerLitre,
@@ -206,7 +280,8 @@ class MonthlySummary {
     required this.flatId,
     required this.monthKey,
     required this.totalLitres,
-    required this.daysSkipped,
+    required this.daysSubscriberPaused,
+    required this.daysMilkmanAbsent,
     required this.daysCustom,
     required this.daysDelivered,
     required this.amountDue,
@@ -218,7 +293,8 @@ class MonthlySummary {
         flatId: flatId,
         monthKey: monthKey,
         totalLitres: 0,
-        daysSkipped: 0,
+        daysSubscriberPaused: 0,
+        daysMilkmanAbsent: 0,
         daysCustom: 0,
         daysDelivered: 0,
         amountDue: 0,
@@ -228,7 +304,10 @@ class MonthlySummary {
   final String flatId;
   final String monthKey;
   final double totalLitres;
-  final int daysSkipped;
+  /// Days where the subscriber paused (or milkman one-off skipped) — not billable.
+  final int daysSubscriberPaused;
+  /// Days where the milkman was off entirely — not billable.
+  final int daysMilkmanAbsent;
   final int daysCustom;
   final int daysDelivered;
   final double amountDue;

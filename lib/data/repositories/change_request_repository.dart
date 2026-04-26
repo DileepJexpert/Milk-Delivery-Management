@@ -119,7 +119,7 @@ class ChangeRequestRepository {
       final row = _deliveries.ensureForToday(flat, when: cursor);
       switch (req.type) {
         case ChangeRequestType.pause:
-          await _deliveries.markSkipped(row, actor, reason: 'subscriber pause');
+          await _deliveries.markPaused(row, actor, reason: 'subscriber pause');
           break;
         case ChangeRequestType.quantityChange:
           await _deliveries.setQuantity(

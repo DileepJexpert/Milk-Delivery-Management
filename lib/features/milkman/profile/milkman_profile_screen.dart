@@ -6,6 +6,7 @@ import '../../../core/localization/app_localizations.dart';
 import '../../../data/local/local_store.dart';
 import '../../../data/models/user.dart';
 import '../../auth/session_controller.dart';
+import '../absences/manage_absences_screen.dart';
 
 class MilkmanProfileScreen extends ConsumerStatefulWidget {
   const MilkmanProfileScreen({super.key});
@@ -198,6 +199,21 @@ class _MilkmanProfileScreenState extends ConsumerState<MilkmanProfileScreen> {
                     ],
                   ),
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Manage absences
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.event_busy),
+              title: Text(t.t('manage_absences')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ManageAbsencesScreen(),
+                ),
               ),
             ),
           ),

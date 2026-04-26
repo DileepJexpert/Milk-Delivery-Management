@@ -65,9 +65,12 @@ class _BillScreenState extends ConsumerState<BillScreen> {
                     style: Theme.of(context).textTheme.displaySmall,
                   ),
                   const SizedBox(height: 8),
-                  Text('${t.t('total_litres')}: ${summary.totalLitres}L'),
-                  Text('${t.t('days_skipped')}: ${summary.daysSkipped}'),
-                  Text('${t.t('days_custom')}: ${summary.daysCustom}'),
+                  Text(
+                      '${t.t('days_delivered_label')}: ${summary.daysDelivered} · ${summary.totalLitres}L'),
+                  Text(
+                      '${t.t('days_subscriber_paused')}: ${summary.daysSubscriberPaused}'),
+                  Text(
+                      '${t.t('days_milkman_absent')}: ${summary.daysMilkmanAbsent}'),
                   const SizedBox(height: 8),
                   Text(
                       '${t.t('price_per_litre')}: ₹${summary.pricePerLitre.toStringAsFixed(2)}'),

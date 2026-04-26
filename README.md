@@ -12,8 +12,13 @@ quantity changes. Offline-first with a Firebase-ready sync queue.
   long-press to set a custom quantity at the door.
 - Inbox of pending change requests from subscribers; one tap to apply, one tap
   to confirm via WhatsApp.
-- Monthly billing per flat (litres, skipped days, custom-qty days, total ₹)
-  with PDF export and WhatsApp share.
+- **Absence / holiday mode** — single day, date range, or recurring weekly
+  off. "I'm off today" big button on the home screen. App subscribers see
+  "no delivery — milkman off" automatically; one-tap WhatsApp broadcast for
+  non-app subscribers. Absent days never count toward the bill.
+- Monthly billing per flat split into three categories — days delivered
+  (billable), days subscriber paused (not billable), days milkman absent
+  (not billable) — with PDF export and WhatsApp share.
 - Per-flat detail page with full delivery history and an immutable audit log.
 
 **Subscriber**

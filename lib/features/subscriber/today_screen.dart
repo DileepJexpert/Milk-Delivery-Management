@@ -19,10 +19,13 @@ class TodayScreen extends ConsumerWidget {
     if (flat == null) return const SizedBox.shrink();
     final history = ref.watch(deliveriesForFlatProvider(flat.id));
     final today = AppDates.dateKey(AppDates.today());
+    final milkmanOff = ref.watch(isMyMilkmanAbsentTodayProvider);
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (milkmanOff) const _MilkmanOffBanner() else const SizedBox.shrink(),
+        if (milkmanOff) const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -41,16 +44,21 @@ class TodayScreen extends ConsumerWidget {
                   data: (rows) {
                     final todayRow =
                         rows.where((r) => r.dateKey == today).toList();
-                    if (todayRow.isEmpty) {
+                    final effectiveStatus = milkmanOff
+                        ? DeliveryStatus.milkmanAbsent
+                        : (todayRow.isEmpty
+                            ? DeliveryStatus.pending
+                            : todayRow.first.status);
+                    if (todayRow.isEmpty || milkmanOff) {
                       return _SchedulePreview(
                           quantity: flat.defaultQuantity,
-                          status: DeliveryStatus.pending);
+                          status: effectiveStatus);
                     }
                     return _SchedulePreview(
                         quantity: todayRow.first.actualQuantity > 0
                             ? todayRow.first.actualQuantity
                             : todayRow.first.plannedQuantity,
-                        status: todayRow.first.status);
+                        status: effectiveStatus);
                   },
                 ),
               ],
@@ -58,8 +66,45 @@ class TodayScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _ActionGrid(flat: flat),
+        if (!milkmanOff) _ActionGrid(flat: flat),
       ],
+    );
+  }
+}
+
+class _MilkmanOffBanner extends StatelessWidget {
+  const _MilkmanOffBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.event_busy,
+                size: 32, color: scheme.onErrorContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.t('no_delivery_today'),
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: scheme.onErrorContainer)),
+                  Text(t.t('no_delivery_explainer'),
+                      style: TextStyle(color: scheme.onErrorContainer)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -77,12 +122,14 @@ class _SchedulePreview extends StatelessWidget {
       DeliveryStatus.delivered => Colors.green,
       DeliveryStatus.skipped => Colors.orange,
       DeliveryStatus.paused => Colors.purple,
+      DeliveryStatus.milkmanAbsent => Colors.red,
       DeliveryStatus.pending => Colors.blueGrey,
     };
     final label = switch (status) {
       DeliveryStatus.delivered => t.t('delivered'),
       DeliveryStatus.skipped => t.t('skipped'),
       DeliveryStatus.paused => t.t('paused'),
+      DeliveryStatus.milkmanAbsent => t.t('milkman_absent'),
       DeliveryStatus.pending => t.t('pending'),
     };
     return Row(

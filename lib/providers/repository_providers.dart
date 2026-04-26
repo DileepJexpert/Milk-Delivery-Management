@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/remote/remote_sync.dart';
+import '../data/repositories/absence_repository.dart';
 import '../data/repositories/audit_repository.dart';
 import '../data/repositories/change_request_repository.dart';
 import '../data/repositories/delivery_repository.dart';
@@ -26,6 +27,13 @@ final deliveryRepositoryProvider = Provider<DeliveryRepository>(
 final changeRequestRepositoryProvider = Provider<ChangeRequestRepository>(
   (ref) => ChangeRequestRepository(
     ref.read(flatRepositoryProvider),
+    ref.read(deliveryRepositoryProvider),
+    ref.read(auditRepositoryProvider),
+  ),
+);
+
+final absenceRepositoryProvider = Provider<AbsenceRepository>(
+  (ref) => AbsenceRepository(
     ref.read(deliveryRepositoryProvider),
     ref.read(auditRepositoryProvider),
   ),

@@ -37,10 +37,14 @@ class BillPdf {
               pw.Table.fromTextArray(
                 headers: const ['Metric', 'Value'],
                 data: [
-                  ['Days delivered', '${summary.daysDelivered}'],
-                  ['Days skipped/paused', '${summary.daysSkipped}'],
+                  ['Days delivered (billable)',
+                      '${summary.daysDelivered}'],
+                  ['Days subscriber paused (not billable)',
+                      '${summary.daysSubscriberPaused}'],
+                  ['Days milkman absent (not billable)',
+                      '${summary.daysMilkmanAbsent}'],
                   ['Days with custom qty', '${summary.daysCustom}'],
-                  ['Total litres', '${summary.totalLitres}L'],
+                  ['Total litres delivered', '${summary.totalLitres}L'],
                   ['Price per litre',
                       '${summary.pricePerLitre.toStringAsFixed(2)}'],
                 ],

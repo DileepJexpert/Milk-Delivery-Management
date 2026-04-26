@@ -24,17 +24,25 @@ final flatsForSocietyProvider =
   return ref.watch(flatRepositoryProvider).watchForSociety(societyId);
 });
 
+// NOTE: these providers deliberately fall back to `const []` when the
+// parent provider is still loading. Returning `Stream.empty()` here would
+// leave the StreamProvider permanently in `loading` state (an empty stream
+// completes without emitting), and Riverpod would still call this builder
+// again when the parent emits — but the screen would hang on a spinner in
+// the meantime. Using an empty list keeps the provider in `data: []` state
+// and lets ref.watch reactively rebuild with real data once it arrives.
+
 final flatsForCurrentMilkmanProvider = StreamProvider<List<Flat>>((ref) {
-  final societies = ref.watch(societiesForCurrentMilkmanProvider).valueOrNull;
-  if (societies == null) return const Stream.empty();
+  final societies =
+      ref.watch(societiesForCurrentMilkmanProvider).valueOrNull ?? const [];
   final ids = societies.map((s) => s.id).toList();
   return ref.watch(flatRepositoryProvider).watchAllForMilkman(ids);
 });
 
 /// Today's planned + actual delivery rows across the whole route.
 final todaysRouteProvider = StreamProvider<List<DailyDelivery>>((ref) {
-  final flats = ref.watch(flatsForCurrentMilkmanProvider).valueOrNull;
-  if (flats == null) return const Stream.empty();
+  final flats =
+      ref.watch(flatsForCurrentMilkmanProvider).valueOrNull ?? const [];
   final repo = ref.watch(deliveryRepositoryProvider);
   // Fire-and-forget: ensureForToday writes to the in-memory Hive cache
   // synchronously; the watch stream below will emit the rows immediately.
@@ -46,8 +54,8 @@ final todaysRouteProvider = StreamProvider<List<DailyDelivery>>((ref) {
 });
 
 final pendingChangeRequestsProvider = StreamProvider<List<ChangeRequest>>((ref) {
-  final flats = ref.watch(flatsForCurrentMilkmanProvider).valueOrNull;
-  if (flats == null) return const Stream.empty();
+  final flats =
+      ref.watch(flatsForCurrentMilkmanProvider).valueOrNull ?? const [];
   return ref
       .watch(changeRequestRepositoryProvider)
       .watchAllForMilkman(flats.map((f) => f.id))

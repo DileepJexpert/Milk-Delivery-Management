@@ -24,28 +24,31 @@ final flatsForSocietyProvider =
   return ref.watch(flatRepositoryProvider).watchForSociety(societyId);
 });
 
-final flatsForCurrentMilkmanProvider = StreamProvider<List<Flat>>((ref) async* {
-  final societies =
-      await ref.watch(societiesForCurrentMilkmanProvider.future);
+final flatsForCurrentMilkmanProvider = StreamProvider<List<Flat>>((ref) {
+  final societies = ref.watch(societiesForCurrentMilkmanProvider).valueOrNull;
+  if (societies == null) return const Stream.empty();
   final ids = societies.map((s) => s.id).toList();
-  yield* ref.watch(flatRepositoryProvider).watchAllForMilkman(ids);
+  return ref.watch(flatRepositoryProvider).watchAllForMilkman(ids);
 });
 
 /// Today's planned + actual delivery rows across the whole route.
-final todaysRouteProvider = StreamProvider<List<DailyDelivery>>((ref) async* {
-  final flats = await ref.watch(flatsForCurrentMilkmanProvider.future);
+final todaysRouteProvider = StreamProvider<List<DailyDelivery>>((ref) {
+  final flats = ref.watch(flatsForCurrentMilkmanProvider).valueOrNull;
+  if (flats == null) return const Stream.empty();
   final repo = ref.watch(deliveryRepositoryProvider);
-  await repo.ensureRouteForToday(flats);
-  yield* repo.watchForDate(
+  // Fire-and-forget: ensureForToday writes to the in-memory Hive cache
+  // synchronously; the watch stream below will emit the rows immediately.
+  repo.ensureRouteForToday(flats);
+  return repo.watchForDate(
     AppDates.dateKey(AppDates.today()),
     flats.map((f) => f.id),
   );
 });
 
-final pendingChangeRequestsProvider =
-    StreamProvider<List<ChangeRequest>>((ref) async* {
-  final flats = await ref.watch(flatsForCurrentMilkmanProvider.future);
-  yield* ref
+final pendingChangeRequestsProvider = StreamProvider<List<ChangeRequest>>((ref) {
+  final flats = ref.watch(flatsForCurrentMilkmanProvider).valueOrNull;
+  if (flats == null) return const Stream.empty();
+  return ref
       .watch(changeRequestRepositoryProvider)
       .watchAllForMilkman(flats.map((f) => f.id))
       .map((rows) =>

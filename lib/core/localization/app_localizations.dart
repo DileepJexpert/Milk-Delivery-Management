@@ -135,6 +135,8 @@ class AppLocalizations {
       'old': 'Old',
       'new': 'New',
       'by': 'By',
+      'record_qty_change': 'Note quantity change',
+      'change_recorded': 'Change noted',
     },
     'hi': {
       'app_title': 'दूध डिलीवरी',
@@ -259,6 +261,8 @@ class AppLocalizations {
       'old': 'पुराना',
       'new': 'नया',
       'by': 'द्वारा',
+      'record_qty_change': 'मात्रा नोट करें',
+      'change_recorded': 'नोट हो गया',
     },
   };
 

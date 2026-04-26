@@ -14,6 +14,7 @@ class LocalStore {
   static const _audit = 'audit_logs';
   static const _settings = 'settings';
   static const _syncQueue = 'sync_queue';
+  static const _absences = 'milkman_absences';
 
   late final Box users;
   late final Box societies;
@@ -23,6 +24,7 @@ class LocalStore {
   late final Box auditLogs;
   late final Box settings;
   late final Box syncQueue;
+  late final Box absences;
 
   bool _opened = false;
 
@@ -36,6 +38,7 @@ class LocalStore {
     auditLogs = await Hive.openBox(_audit);
     settings = await Hive.openBox(_settings);
     syncQueue = await Hive.openBox(_syncQueue);
+    absences = await Hive.openBox(_absences);
     _opened = true;
   }
 
@@ -48,6 +51,7 @@ class LocalStore {
       changeRequests.clear(),
       auditLogs.clear(),
       syncQueue.clear(),
+      absences.clear(),
     ]);
   }
 }

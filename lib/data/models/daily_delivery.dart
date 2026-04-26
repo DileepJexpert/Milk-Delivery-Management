@@ -1,4 +1,4 @@
-enum DeliveryStatus { pending, delivered, skipped, paused }
+enum DeliveryStatus { pending, delivered, skipped, paused, milkmanAbsent }
 
 class DailyDelivery {
   DailyDelivery({

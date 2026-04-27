@@ -147,9 +147,13 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
         onPressed: () => ref.read(localeControllerProvider.notifier).toggle(),
       ),
       PopupMenuButton<String>(
-        onSelected: (v) async {
+        onSelected: (v) {
           if (v == 'logout') {
-            await ref.read(sessionControllerProvider.notifier).signOut();
+            // Defer to the next frame so the popup's closing animation
+            // finishes before the session swap replaces this widget tree.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ref.read(sessionControllerProvider.notifier).signOut();
+            });
           }
         },
         itemBuilder: (_) => [

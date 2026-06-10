@@ -5,6 +5,8 @@ import '../../core/localization/app_localizations.dart';
 import '../../core/utils/date_utils.dart';
 import '../../data/models/daily_delivery.dart';
 import '../../data/models/flat.dart';
+import '../../data/models/product.dart';
+import '../../data/models/subscription.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/repository_providers.dart';
 import '../auth/session_controller.dart';
@@ -17,6 +19,12 @@ class TodayScreen extends ConsumerWidget {
     final t = AppLocalizations.of(context);
     final flat = ref.watch(myFlatProvider);
     if (flat == null) return const SizedBox.shrink();
+    final mySubs =
+        ref.watch(mySubscriptionsProvider).valueOrNull ?? const <Subscription>[];
+    final activeSubs =
+        mySubs.where((s) => s.status == SubscriptionStatus.active).toList();
+    final products = ref.watch(productsProvider).valueOrNull ?? const <Product>[];
+    final productsById = {for (final p in products) p.id: p};
     final history = ref.watch(deliveriesForFlatProvider(flat.id));
     final today = AppDates.dateKey(AppDates.today());
     final milkmanOff = ref.watch(isMyMilkmanAbsentTodayProvider);
@@ -24,8 +32,14 @@ class TodayScreen extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (milkmanOff) const _MilkmanOffBanner() else const SizedBox.shrink(),
+        if (milkmanOff) const _MilkmanOffBanner(),
         if (milkmanOff) const SizedBox(height: 12),
+
+        if (flat.billingMode == BillingMode.prepaid)
+          _WalletStrip(flat: flat),
+        if (flat.billingMode == BillingMode.prepaid)
+          const SizedBox(height: 12),
+
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -36,29 +50,48 @@ class TodayScreen extends ConsumerWidget {
                   '${t.t('today_label')} · Flat ${flat.flatNumber}',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
+                const SizedBox(height: 4),
+                Text(t.t('todays_items'),
+                    style: Theme.of(context).textTheme.labelMedium),
                 const SizedBox(height: 12),
                 history.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
                   error: (e, _) => Text('$e'),
                   data: (rows) {
-                    final todayRow =
-                        rows.where((r) => r.dateKey == today).toList();
-                    final effectiveStatus = milkmanOff
-                        ? DeliveryStatus.milkmanAbsent
-                        : (todayRow.isEmpty
-                            ? DeliveryStatus.pending
-                            : todayRow.first.status);
-                    if (todayRow.isEmpty || milkmanOff) {
-                      return _SchedulePreview(
-                          quantity: flat.defaultQuantity,
-                          status: effectiveStatus);
+                    if (activeSubs.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(t.t('no_subscriptions')),
+                      );
                     }
-                    return _SchedulePreview(
-                        quantity: todayRow.first.actualQuantity > 0
-                            ? todayRow.first.actualQuantity
-                            : todayRow.first.plannedQuantity,
-                        status: effectiveStatus);
+                    return Column(
+                      children: [
+                        for (final s in activeSubs)
+                          _SubscriptionLine(
+                            subscription: s,
+                            product: productsById[s.productId],
+                            todayRow: rows.firstWhere(
+                              (r) =>
+                                  r.dateKey == today &&
+                                  r.productId == s.productId,
+                              orElse: () => DailyDelivery(
+                                id: '',
+                                flatId: flat.id,
+                                productId: s.productId,
+                                dateKey: today,
+                                plannedQuantity: s.quantity,
+                                actualQuantity: 0,
+                                unitPrice: s.unitPrice,
+                                status: milkmanOff
+                                    ? DeliveryStatus.milkmanAbsent
+                                    : DeliveryStatus.pending,
+                              ),
+                            ),
+                            milkmanOff: milkmanOff,
+                          ),
+                      ],
+                    );
                   },
                 ),
               ],
@@ -68,6 +101,113 @@ class TodayScreen extends ConsumerWidget {
         const SizedBox(height: 16),
         if (!milkmanOff) _ActionGrid(flat: flat),
       ],
+    );
+  }
+}
+
+class _WalletStrip extends StatelessWidget {
+  const _WalletStrip({required this.flat});
+  final Flat flat;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final low = flat.walletBalance < 100;
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: low
+          ? scheme.errorContainer
+          : Colors.green.withOpacity(0.15),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              low ? Icons.warning : Icons.account_balance_wallet,
+              color: low ? scheme.onErrorContainer : Colors.green.shade800,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.t('wallet_balance'),
+                      style: TextStyle(
+                        color: low ? scheme.onErrorContainer : null,
+                        fontSize: 12,
+                      )),
+                  Text(
+                    '₹${flat.walletBalance.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: low
+                          ? scheme.onErrorContainer
+                          : Colors.green.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (low)
+              Text(t.t('low_balance'),
+                  style: TextStyle(
+                    color: scheme.onErrorContainer,
+                    fontWeight: FontWeight.w600,
+                  )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubscriptionLine extends StatelessWidget {
+  const _SubscriptionLine({
+    required this.subscription,
+    required this.product,
+    required this.todayRow,
+    required this.milkmanOff,
+  });
+
+  final Subscription subscription;
+  final Product? product;
+  final DailyDelivery todayRow;
+  final bool milkmanOff;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final status = milkmanOff ? DeliveryStatus.milkmanAbsent : todayRow.status;
+    final name = product?.name ?? '—';
+    final unit = product?.unit.short ?? '';
+    final color = switch (status) {
+      DeliveryStatus.delivered => Colors.green,
+      DeliveryStatus.skipped => Colors.orange,
+      DeliveryStatus.paused => Colors.purple,
+      DeliveryStatus.milkmanAbsent => Colors.red,
+      DeliveryStatus.pending => Colors.blueGrey,
+    };
+    final label = switch (status) {
+      DeliveryStatus.delivered => t.t('delivered'),
+      DeliveryStatus.skipped => t.t('skipped'),
+      DeliveryStatus.paused => t.t('paused'),
+      DeliveryStatus.milkmanAbsent => t.t('milkman_absent'),
+      DeliveryStatus.pending => t.t('pending'),
+    };
+    final qty = status == DeliveryStatus.delivered
+        ? todayRow.actualQuantity
+        : subscription.quantity;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.local_drink, color: color, size: 32),
+      title: Text(name,
+          style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        '$qty $unit · ₹${subscription.unitPrice.toStringAsFixed(0)}/$unit',
+      ),
+      trailing: Text(label, style: TextStyle(color: color)),
     );
   }
 }
@@ -85,8 +225,7 @@ class _MilkmanOffBanner extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(Icons.event_busy,
-                size: 32, color: scheme.onErrorContainer),
+            Icon(Icons.event_busy, size: 32, color: scheme.onErrorContainer),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -105,46 +244,6 @@ class _MilkmanOffBanner extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _SchedulePreview extends StatelessWidget {
-  const _SchedulePreview({required this.quantity, required this.status});
-
-  final double quantity;
-  final DeliveryStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppLocalizations.of(context);
-    final color = switch (status) {
-      DeliveryStatus.delivered => Colors.green,
-      DeliveryStatus.skipped => Colors.orange,
-      DeliveryStatus.paused => Colors.purple,
-      DeliveryStatus.milkmanAbsent => Colors.red,
-      DeliveryStatus.pending => Colors.blueGrey,
-    };
-    final label = switch (status) {
-      DeliveryStatus.delivered => t.t('delivered'),
-      DeliveryStatus.skipped => t.t('skipped'),
-      DeliveryStatus.paused => t.t('paused'),
-      DeliveryStatus.milkmanAbsent => t.t('milkman_absent'),
-      DeliveryStatus.pending => t.t('pending'),
-    };
-    return Row(
-      children: [
-        Icon(Icons.local_drink, size: 36, color: color),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${quantity}L',
-                style: Theme.of(context).textTheme.headlineMedium),
-            Text(label, style: TextStyle(color: color)),
-          ],
-        ),
-      ],
     );
   }
 }
@@ -245,8 +344,7 @@ class _ActionGrid extends ConsumerWidget {
                     context: ctx,
                     firstDate:
                         DateTime.now().subtract(const Duration(days: 1)),
-                    lastDate:
-                        DateTime.now().add(const Duration(days: 365)),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
                   );
                   if (r != null) setState(() => range = r);
                 },

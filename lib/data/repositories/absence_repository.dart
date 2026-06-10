@@ -186,12 +186,15 @@ class AbsenceRepository {
     var cursor = from;
     while (!cursor.isAfter(to)) {
       for (final f in flats) {
-        final row = _deliveries.ensureForToday(f, when: cursor);
-        // Don't clobber an already-delivered row; that's data the milkman
-        // explicitly recorded. markAbsent already writes a per-flat audit
-        // entry, so the absence is fully traceable from each flat's history.
-        if (row.status != DeliveryStatus.delivered) {
-          await _deliveries.markAbsent(row, milkman, reason: reason);
+        for (final sub in _deliveries.subscriptionsForFlat(f.id)) {
+          final row =
+              _deliveries.ensureForSubscription(f, sub, when: cursor);
+          // Don't clobber an already-delivered row; that's data the milkman
+          // explicitly recorded. markAbsent writes a per-flat audit entry, so
+          // the absence is fully traceable from each flat's history.
+          if (row.status != DeliveryStatus.delivered) {
+            await _deliveries.markAbsent(row, milkman, reason: reason);
+          }
         }
       }
       cursor = cursor.add(const Duration(days: 1));

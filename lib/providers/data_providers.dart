@@ -7,8 +7,12 @@ import '../data/models/change_request.dart';
 import '../data/models/daily_delivery.dart';
 import '../data/models/flat.dart';
 import '../data/models/milkman_absence.dart';
+import '../data/models/category.dart';
+import '../data/models/product.dart';
 import '../data/models/society.dart';
+import '../data/models/subscription.dart';
 import '../data/models/user.dart';
+import '../data/models/wallet_transaction.dart';
 import '../features/auth/session_controller.dart';
 import 'repository_providers.dart';
 
@@ -131,4 +135,42 @@ final isMyMilkmanAbsentTodayProvider = Provider<bool>((ref) {
   return ref
       .watch(absenceRepositoryProvider)
       .isAbsentOn(AppDates.today(), milkman.id);
+});
+
+// ───────── Catalog / Subscriptions / Wallet ─────────
+
+final categoriesProvider = StreamProvider<List<ProductCategory>>((ref) {
+  return ref.watch(categoryRepositoryProvider).watchAll();
+});
+
+final productsProvider = StreamProvider<List<Product>>((ref) {
+  return ref.watch(productRepositoryProvider).watchAll();
+});
+
+final activeProductsProvider = StreamProvider<List<Product>>((ref) {
+  return ref.watch(productRepositoryProvider).watchActive();
+});
+
+final subscriptionsForFlatProvider =
+    StreamProvider.family<List<Subscription>, String>((ref, flatId) {
+  return ref.watch(subscriptionRepositoryProvider).watchForFlat(flatId);
+});
+
+final walletTxnsForFlatProvider =
+    StreamProvider.family<List<WalletTxn>, String>((ref, flatId) {
+  return ref.watch(walletRepositoryProvider).watchForFlat(flatId);
+});
+
+/// Subscriber's own subscriptions (matched via myFlatProvider).
+final mySubscriptionsProvider = StreamProvider<List<Subscription>>((ref) {
+  final flat = ref.watch(myFlatProvider);
+  if (flat == null) return const Stream.empty();
+  return ref.watch(subscriptionRepositoryProvider).watchForFlat(flat.id);
+});
+
+/// Subscriber's own wallet history.
+final myWalletTxnsProvider = StreamProvider<List<WalletTxn>>((ref) {
+  final flat = ref.watch(myFlatProvider);
+  if (flat == null) return const Stream.empty();
+  return ref.watch(walletRepositoryProvider).watchForFlat(flat.id);
 });

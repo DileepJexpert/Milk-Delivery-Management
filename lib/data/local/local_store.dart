@@ -15,6 +15,10 @@ class LocalStore {
   static const _settings = 'settings';
   static const _syncQueue = 'sync_queue';
   static const _absences = 'milkman_absences';
+  static const _categories = 'product_categories';
+  static const _products = 'products';
+  static const _subscriptions = 'subscriptions';
+  static const _walletTxns = 'wallet_txns';
 
   late final Box users;
   late final Box societies;
@@ -25,6 +29,10 @@ class LocalStore {
   late final Box settings;
   late final Box syncQueue;
   late final Box absences;
+  late final Box categories;
+  late final Box products;
+  late final Box subscriptions;
+  late final Box walletTxns;
 
   bool _opened = false;
 
@@ -39,6 +47,10 @@ class LocalStore {
     settings = await Hive.openBox(_settings);
     syncQueue = await Hive.openBox(_syncQueue);
     absences = await Hive.openBox(_absences);
+    categories = await Hive.openBox(_categories);
+    products = await Hive.openBox(_products);
+    subscriptions = await Hive.openBox(_subscriptions);
+    walletTxns = await Hive.openBox(_walletTxns);
     _opened = true;
   }
 
@@ -52,6 +64,10 @@ class LocalStore {
       auditLogs.clear(),
       syncQueue.clear(),
       absences.clear(),
+      categories.clear(),
+      products.clear(),
+      subscriptions.clear(),
+      walletTxns.clear(),
     ]);
   }
 }

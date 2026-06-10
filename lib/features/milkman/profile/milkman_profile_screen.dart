@@ -7,6 +7,7 @@ import '../../../data/local/local_store.dart';
 import '../../../data/models/user.dart';
 import '../../auth/session_controller.dart';
 import '../absences/manage_absences_screen.dart';
+import '../catalog/catalog_screen.dart';
 
 class MilkmanProfileScreen extends ConsumerStatefulWidget {
   const MilkmanProfileScreen({super.key});
@@ -205,6 +206,22 @@ class _MilkmanProfileScreenState extends ConsumerState<MilkmanProfileScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // Manage catalog
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.inventory_2_outlined),
+              title: Text(t.t('catalog')),
+              subtitle: Text(t.t('manage_products')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const CatalogScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
 
           // Manage absences
           Card(

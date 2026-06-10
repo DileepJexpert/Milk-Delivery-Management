@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../local/local_store.dart';
 import '../local/sync_queue.dart';
 import '../models/audit_log.dart';
-import '../models/flat.dart';
+import '../models/flat.dart' show Flat, FlatStatus, BillingMode;
 import '../models/user.dart';
 import 'audit_repository.dart';
 
@@ -144,6 +144,24 @@ class FlatRepository {
       oldValue: flat.status.name,
       newValue: FlatStatus.active.name,
       reason: reason,
+    );
+    return updated;
+  }
+
+  Future<Flat> setBillingMode(
+    Flat flat,
+    AppUser actor,
+    BillingMode mode,
+  ) async {
+    if (flat.billingMode == mode) return flat;
+    final updated = flat.copyWith(billingMode: mode);
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.billingModeChanged,
+      oldValue: flat.billingMode.name,
+      newValue: mode.name,
     );
     return updated;
   }

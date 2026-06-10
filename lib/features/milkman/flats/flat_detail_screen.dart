@@ -9,6 +9,8 @@ import '../../../data/models/flat.dart';
 import '../../../providers/data_providers.dart';
 import '../../../providers/repository_providers.dart';
 import '../../auth/session_controller.dart';
+import 'subscriptions_screen.dart';
+import 'wallet_screen.dart';
 
 class FlatDetailScreen extends ConsumerStatefulWidget {
   const FlatDetailScreen({super.key, required this.flatId});
@@ -82,8 +84,15 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
     final reason = reasonCtrl.text.trim().isEmpty ? null : reasonCtrl.text.trim();
     final actor = ref.read(sessionControllerProvider).user!;
     final deliveryRepo = ref.read(deliveryRepositoryProvider);
-    final row = deliveryRepo.ensureForToday(flat, when: selectedDate);
-    await deliveryRepo.setQuantity(row, actor, newQty, reason: reason);
+    // Apply to all active subscriptions on this flat for the chosen date. Most
+    // flats have a single (cow milk) subscription; for multi-product flats the
+    // milkman can fine-tune from Today's Route instead.
+    final subs = deliveryRepo.subscriptionsForFlat(flat.id);
+    for (final sub in subs) {
+      final row =
+          deliveryRepo.ensureForSubscription(flat, sub, when: selectedDate);
+      await deliveryRepo.setQuantity(row, actor, newQty, reason: reason);
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(t.t('change_recorded'))),
@@ -281,6 +290,44 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
         children: [
           // ── Status card ──────────────────────────────────────────────────
           _StatusCard(flat: flat, onPause: _pauseFlat, onResume: _resumeFlat, onStop: _stopFlat),
+          const SizedBox(height: 12),
+
+          // ── Subscriptions + Wallet quick nav ─────────────────────────────
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.subscriptions_outlined),
+                  title: Text(t.t('manage_subscriptions')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SubscriptionsScreen(flatId: flat.id),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.account_balance_wallet_outlined),
+                  title: Text(t.t('wallet')),
+                  subtitle: Text(
+                    '${t.t('wallet_balance')}: ₹${flat.walletBalance.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: flat.walletBalance < 0 ? Colors.red : null,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => WalletScreen(flatId: flat.id),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                _BillingModeRow(flat: flat),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
 
           // ── Info card ────────────────────────────────────────────────────
@@ -592,5 +639,53 @@ class _AuditTile extends StatelessWidget {
       default:
         return t.name;
     }
+  }
+}
+
+class _BillingModeRow extends ConsumerWidget {
+  const _BillingModeRow({required this.flat});
+  final Flat flat;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.receipt_long_outlined),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t.t('billing_mode'),
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 4),
+                SegmentedButton<BillingMode>(
+                  segments: [
+                    ButtonSegment(
+                      value: BillingMode.prepaid,
+                      label: Text(t.t('billing_prepaid')),
+                    ),
+                    ButtonSegment(
+                      value: BillingMode.postpaid,
+                      label: Text(t.t('billing_postpaid')),
+                    ),
+                  ],
+                  selected: {flat.billingMode},
+                  onSelectionChanged: (s) async {
+                    final actor = ref.read(sessionControllerProvider).user!;
+                    await ref
+                        .read(flatRepositoryProvider)
+                        .setBillingMode(flat, actor, s.first);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

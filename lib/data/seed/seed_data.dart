@@ -2,9 +2,12 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/utils/date_utils.dart';
 import '../local/local_store.dart';
+import '../models/category.dart';
 import '../models/daily_delivery.dart';
 import '../models/flat.dart';
+import '../models/product.dart';
 import '../models/society.dart';
+import '../models/subscription.dart';
 import '../models/user.dart';
 
 /// Deterministic seed data so the app is usable on first launch.
@@ -13,8 +16,18 @@ import '../models/user.dart';
 class SeedData {
   static const _uuid = Uuid();
   static const _seededFlag = 'seeded_v1';
+  static const _catalogFlag = 'catalog_seeded_v1';
+  static const _migratedFlag = 'subscriptions_migrated_v1';
 
   static Future<void> ensureSeeded() async {
+    await _seedV1();
+    await _seedCatalog();
+    await _migrateFlatsToSubscriptions();
+  }
+
+  // ───────────────────── v1: original users / flats / history ─────────────
+
+  static Future<void> _seedV1() async {
     final settings = LocalStore.instance.settings;
     if (settings.get(_seededFlag) == true) return;
 
@@ -66,6 +79,7 @@ class SeedData {
         hasApp: true,
         defaultQuantity: 1.0,
         pricePerLitre: 60,
+        billingMode: BillingMode.postpaid,
       ),
       Flat(
         id: _uuid.v4(),
@@ -76,6 +90,8 @@ class SeedData {
         hasApp: false,
         defaultQuantity: 2.0,
         pricePerLitre: 60,
+        billingMode: BillingMode.prepaid,
+        walletBalance: 500,
       ),
       Flat(
         id: _uuid.v4(),
@@ -123,9 +139,11 @@ class SeedData {
         final delivery = DailyDelivery(
           id: _uuid.v4(),
           flatId: f.id,
+          productId: '', // gets migrated below
           dateKey: key,
           plannedQuantity: f.defaultQuantity,
           actualQuantity: delivered ? f.defaultQuantity : 0,
+          unitPrice: f.pricePerLitre,
           status: delivered ? DeliveryStatus.delivered : DeliveryStatus.skipped,
           deliveredAt: delivered
               ? d.add(const Duration(hours: 7, minutes: 15))
@@ -137,5 +155,138 @@ class SeedData {
     }
 
     await settings.put(_seededFlag, true);
+  }
+
+  // ───────────────────── Catalog: categories + products ───────────────────
+
+  static Future<void> _seedCatalog() async {
+    final settings = LocalStore.instance.settings;
+    if (settings.get(_catalogFlag) == true) return;
+
+    final dairy = ProductCategory(
+      id: 'cat-dairy',
+      name: 'Dairy',
+      icon: 'local_drink',
+      sortOrder: 1,
+    );
+    final groceries = ProductCategory(
+      id: 'cat-groceries',
+      name: 'Groceries',
+      icon: 'shopping_basket',
+      sortOrder: 2,
+    );
+    final bakery = ProductCategory(
+      id: 'cat-bakery',
+      name: 'Bakery',
+      icon: 'bakery_dining',
+      sortOrder: 3,
+    );
+    await LocalStore.instance.categories.put(dairy.id, dairy.toJson());
+    await LocalStore.instance.categories.put(groceries.id, groceries.toJson());
+    await LocalStore.instance.categories.put(bakery.id, bakery.toJson());
+
+    final products = <Product>[
+      Product(
+        id: 'prod-cow-milk',
+        categoryId: dairy.id,
+        name: 'Cow Milk',
+        unit: ProductUnit.litre,
+        defaultPrice: 60,
+      ),
+      Product(
+        id: _uuid.v4(),
+        categoryId: dairy.id,
+        name: 'Buffalo Milk',
+        unit: ProductUnit.litre,
+        defaultPrice: 70,
+      ),
+      Product(
+        id: _uuid.v4(),
+        categoryId: dairy.id,
+        name: 'Curd',
+        unit: ProductUnit.kg,
+        defaultPrice: 80,
+      ),
+      Product(
+        id: _uuid.v4(),
+        categoryId: dairy.id,
+        name: 'Paneer',
+        unit: ProductUnit.kg,
+        defaultPrice: 350,
+      ),
+      Product(
+        id: _uuid.v4(),
+        categoryId: dairy.id,
+        name: 'Ghee',
+        unit: ProductUnit.litre,
+        defaultPrice: 600,
+      ),
+      Product(
+        id: _uuid.v4(),
+        categoryId: bakery.id,
+        name: 'Bread',
+        unit: ProductUnit.piece,
+        defaultPrice: 40,
+      ),
+      Product(
+        id: _uuid.v4(),
+        categoryId: groceries.id,
+        name: 'Eggs',
+        unit: ProductUnit.piece,
+        defaultPrice: 8,
+      ),
+    ];
+    for (final p in products) {
+      await LocalStore.instance.products.put(p.id, p.toJson());
+    }
+
+    await settings.put(_catalogFlag, true);
+  }
+
+  // ───────── Migration: existing flats → cow milk subscription ────────────
+
+  static Future<void> _migrateFlatsToSubscriptions() async {
+    final settings = LocalStore.instance.settings;
+    if (settings.get(_migratedFlag) == true) return;
+
+    const cowMilkId = 'prod-cow-milk';
+
+    // 1. Subscriptions: one per flat using its legacy defaultQuantity.
+    final existingSubs = LocalStore.instance.subscriptions.values
+        .whereType<Map>()
+        .map(Subscription.fromJson)
+        .toList();
+    final flatsWithSubs = existingSubs.map((s) => s.flatId).toSet();
+
+    for (final raw in LocalStore.instance.flats.values.whereType<Map>()) {
+      final flat = Flat.fromJson(raw);
+      if (flatsWithSubs.contains(flat.id)) continue;
+      if (flat.defaultQuantity <= 0) continue;
+      final sub = Subscription(
+        id: _uuid.v4(),
+        flatId: flat.id,
+        productId: cowMilkId,
+        quantity: flat.defaultQuantity,
+        unitPrice: flat.pricePerLitre,
+        status: SubscriptionStatus.active,
+        createdAt: DateTime.now(),
+      );
+      await LocalStore.instance.subscriptions.put(sub.id, sub.toJson());
+    }
+
+    // 2. Backfill productId on legacy delivery rows.
+    final deliveriesBox = LocalStore.instance.deliveries;
+    final toUpdate = <DailyDelivery>[];
+    for (final raw in deliveriesBox.values.whereType<Map>()) {
+      final d = DailyDelivery.fromJson(raw);
+      if (d.productId.isEmpty) {
+        toUpdate.add(d.copyWith(productId: cowMilkId));
+      }
+    }
+    for (final d in toUpdate) {
+      await deliveriesBox.put(d.id, d.toJson());
+    }
+
+    await settings.put(_migratedFlag, true);
   }
 }

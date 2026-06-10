@@ -8,6 +8,7 @@ import '../../../core/utils/whatsapp.dart';
 import '../../../data/models/daily_delivery.dart';
 import '../../../data/models/flat.dart';
 import '../../../data/models/milkman_absence.dart';
+import '../../../data/models/product.dart';
 import '../../../data/models/society.dart';
 import '../../../providers/data_providers.dart';
 import '../../../providers/repository_providers.dart';
@@ -24,23 +25,40 @@ class TodaysRouteScreen extends ConsumerWidget {
     final flatsAsync = ref.watch(flatsForCurrentMilkmanProvider);
     final societiesAsync = ref.watch(societiesForCurrentMilkmanProvider);
     final routeAsync = ref.watch(todaysRouteProvider);
+    final productsAsync = ref.watch(productsProvider);
 
     if (flatsAsync.isLoading ||
         societiesAsync.isLoading ||
-        routeAsync.isLoading) {
+        routeAsync.isLoading ||
+        productsAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
     final flats = flatsAsync.value ?? [];
     final societies = societiesAsync.value ?? [];
     final rows = routeAsync.value ?? [];
+    final products = productsAsync.value ?? [];
     if (flats.isEmpty) {
       return Center(child: Text(t.t('no_flats')));
     }
 
+    final activeFlats =
+        flats.where((f) => f.status != FlatStatus.stopped).toList();
+    final productsById = {for (final p in products) p.id: p};
 
-    final rowsByFlat = {for (final r in rows) r.flatId: r};
-    final activeFlats = flats.where((f) => f.status != FlatStatus.stopped).toList();
+    // Group all delivery rows by flat id, then sort each list by product name.
+    final rowsByFlat = <String, List<DailyDelivery>>{};
+    for (final r in rows) {
+      rowsByFlat.putIfAbsent(r.flatId, () => []).add(r);
+    }
+    for (final list in rowsByFlat.values) {
+      list.sort((a, b) {
+        final an = productsById[a.productId]?.name ?? '';
+        final bn = productsById[b.productId]?.name ?? '';
+        return an.compareTo(bn);
+      });
+    }
+
     final grouped = groupBy(activeFlats, (f) => f.societyId);
     final isOffToday = ref.watch(isMilkmanAbsentTodayProvider);
 
@@ -54,6 +72,7 @@ class TodaysRouteScreen extends ConsumerWidget {
             society: society,
             flats: grouped[society.id] ?? const [],
             rowsByFlat: rowsByFlat,
+            productsById: productsById,
           ),
       ],
     );
@@ -65,11 +84,13 @@ class _SocietyBlock extends ConsumerWidget {
     required this.society,
     required this.flats,
     required this.rowsByFlat,
+    required this.productsById,
   });
 
   final Society society;
   final List<Flat> flats;
-  final Map<String, DailyDelivery> rowsByFlat;
+  final Map<String, List<DailyDelivery>> rowsByFlat;
+  final Map<String, Product> productsById;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,7 +98,7 @@ class _SocietyBlock extends ConsumerWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -87,9 +108,10 @@ class _SocietyBlock extends ConsumerWidget {
             ),
             const Divider(height: 16),
             for (final f in flats)
-              _DeliveryRow(
+              _FlatBlock(
                 flat: f,
-                row: rowsByFlat[f.id],
+                rows: rowsByFlat[f.id] ?? const [],
+                productsById: productsById,
               ),
           ],
         ),
@@ -98,11 +120,104 @@ class _SocietyBlock extends ConsumerWidget {
   }
 }
 
-class _DeliveryRow extends ConsumerWidget {
-  const _DeliveryRow({required this.flat, required this.row});
+class _FlatBlock extends ConsumerWidget {
+  const _FlatBlock({
+    required this.flat,
+    required this.rows,
+    required this.productsById,
+  });
 
   final Flat flat;
-  final DailyDelivery? row;
+  final List<DailyDelivery> rows;
+  final Map<String, Product> productsById;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final isPrepaid = flat.billingMode == BillingMode.prepaid;
+    final balanceLow = isPrepaid && flat.walletBalance < 100;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Flat header
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: scheme.primaryContainer,
+                child: Text(
+                  flat.flatNumber.substring(0, 1),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onPrimaryContainer,
+                      fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Flat ${flat.flatNumber} · ${flat.ownerName}',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (isPrepaid)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: balanceLow
+                        ? Colors.red.withOpacity(0.15)
+                        : Colors.green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '₹${flat.walletBalance.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: balanceLow ? Colors.red : Colors.green.shade800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(36, 4, 0, 4),
+              child: Text(
+                t.t('no_subscriptions_short'),
+                style: TextStyle(color: scheme.outline, fontSize: 12),
+              ),
+            )
+          else
+            for (final row in rows)
+              _ProductRow(
+                flat: flat,
+                row: row,
+                product: productsById[row.productId],
+              ),
+          const Divider(height: 16, indent: 36),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductRow extends ConsumerWidget {
+  const _ProductRow({
+    required this.flat,
+    required this.row,
+    required this.product,
+  });
+
+  final Flat flat;
+  final DailyDelivery row;
+  final Product? product;
 
   Color _statusColor(BuildContext context, DeliveryStatus s) {
     final scheme = Theme.of(context).colorScheme;
@@ -126,79 +241,79 @@ class _DeliveryRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
-    final status = row?.status ?? DeliveryStatus.pending;
-    final qty = row?.actualQuantity ?? 0;
-    final planned = row?.plannedQuantity ?? flat.defaultQuantity;
+    final status = row.status;
+    final qty = row.actualQuantity;
+    final planned = row.plannedQuantity;
+    final unit = product?.unit.short ?? '';
+    final name = product?.name ?? '—';
     final repo = ref.read(deliveryRepositoryProvider);
 
     return InkWell(
       onLongPress: () => _changeQty(context, ref),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.fromLTRB(28, 6, 0, 6),
         child: Row(
           children: [
-            Icon(_statusIcon(status), color: _statusColor(context, status), size: 32),
-            const SizedBox(width: 12),
+            Icon(_statusIcon(status),
+                color: _statusColor(context, status), size: 26),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Flat ${flat.flatNumber} · ${flat.ownerName}',
+                    name,
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
+                        fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   Text(
                     status == DeliveryStatus.delivered
-                        ? '${t.t('delivered')} · ${qty}L'
-                        : '${t.t('qty_label')}: ${planned}L',
-                    style: TextStyle(color: _statusColor(context, status)),
+                        ? '${t.t('delivered')} · $qty $unit'
+                        : '${t.t('qty_label')}: $planned $unit  ·  ₹${row.unitPrice.toStringAsFixed(0)}/$unit',
+                    style: TextStyle(
+                        color: _statusColor(context, status), fontSize: 12),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            // Big tap target: one-tap "Delivered" (default qty).
+            const SizedBox(width: 6),
             FilledButton.tonalIcon(
               style: FilledButton.styleFrom(
-                minimumSize: const Size(110, 48),
+                minimumSize: const Size(90, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 backgroundColor: status == DeliveryStatus.delivered
                     ? Colors.green.withOpacity(0.2)
                     : null,
               ),
-              onPressed: row == null
-                  ? null
-                  : () {
-                      final actor =
-                          ref.read(sessionControllerProvider).user;
-                      if (actor == null) return;
-                      repo.markDelivered(row!, actor);
-                    },
-              icon: const Icon(Icons.check),
-              label: Text(t.t('mark_delivered')),
-            ),
-            const SizedBox(width: 6),
-            IconButton.filledTonal(
-              tooltip: t.t('mark_skipped'),
-              onPressed: row == null
-                  ? null
-                  : () {
-                      final actor =
-                          ref.read(sessionControllerProvider).user;
-                      if (actor == null) return;
-                      repo.markSkipped(row!, actor);
-                    },
-              icon: const Icon(Icons.cancel_outlined),
+              onPressed: () {
+                final actor = ref.read(sessionControllerProvider).user;
+                if (actor == null) return;
+                repo.markDelivered(row, actor);
+              },
+              icon: const Icon(Icons.check, size: 16),
+              label: Text(t.t('mark_delivered'),
+                  style: const TextStyle(fontSize: 12)),
             ),
             const SizedBox(width: 4),
+            IconButton.filledTonal(
+              tooltip: t.t('mark_skipped'),
+              iconSize: 20,
+              onPressed: () {
+                final actor = ref.read(sessionControllerProvider).user;
+                if (actor == null) return;
+                repo.markSkipped(row, actor);
+              },
+              icon: const Icon(Icons.cancel_outlined),
+            ),
             if (!flat.hasApp)
               IconButton(
                 tooltip: t.t('whatsapp_notify'),
+                iconSize: 20,
                 color: Colors.green.shade700,
                 icon: const Icon(Icons.send_outlined),
                 onPressed: () => WhatsAppLink.send(
                   flat.ownerPhone,
-                  'Hi ${flat.ownerName}, today\'s milk: ${qty}L delivered.',
+                  'Hi ${flat.ownerName}, today: $qty $unit $name delivered.',
                 ),
               ),
           ],
@@ -208,9 +323,8 @@ class _DeliveryRow extends ConsumerWidget {
   }
 
   Future<void> _changeQty(BuildContext context, WidgetRef ref) async {
-    if (row == null) return;
     final t = AppLocalizations.of(context);
-    final qtyC = TextEditingController(text: row!.plannedQuantity.toString());
+    final qtyC = TextEditingController(text: row.plannedQuantity.toString());
     final reasonC = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -222,8 +336,10 @@ class _DeliveryRow extends ConsumerWidget {
             TextField(
               controller: qtyC,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: t.t('change_qty_dialog')),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  InputDecoration(labelText: t.t('change_qty_dialog')),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -247,7 +363,7 @@ class _DeliveryRow extends ConsumerWidget {
     if (qty == null) return;
     final actor = ref.read(sessionControllerProvider).user!;
     final repo = ref.read(deliveryRepositoryProvider);
-    final updated = await repo.setQuantity(row!, actor, qty,
+    final updated = await repo.setQuantity(row, actor, qty,
         reason: reasonC.text.trim().isEmpty ? null : reasonC.text.trim());
     await repo.markDelivered(updated, actor,
         reason: reasonC.text.trim().isEmpty ? null : reasonC.text.trim());
@@ -346,8 +462,7 @@ class _OffTodayBanner extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(Icons.event_busy,
-                size: 32, color: scheme.onErrorContainer),
+            Icon(Icons.event_busy, size: 32, color: scheme.onErrorContainer),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -377,9 +492,8 @@ class _OffTodayBanner extends ConsumerWidget {
   Future<void> _undoOffToday(BuildContext context, WidgetRef ref) async {
     final actor = ref.read(sessionControllerProvider).user;
     if (actor == null) return;
-    // Find the absence that covers today and delete it.
-    final absences = await ref
-        .read(absencesForCurrentMilkmanProvider.future);
+    final absences =
+        await ref.read(absencesForCurrentMilkmanProvider.future);
     final today = AppDates.today();
     final todayKey = AppDates.dateKey(today);
     MilkmanAbsence? hit;

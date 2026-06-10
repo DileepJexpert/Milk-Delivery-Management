@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/indian_holidays.dart';
 import '../local/local_store.dart';
 import '../local/sync_queue.dart';
 import '../models/audit_log.dart';
@@ -85,8 +86,13 @@ class DeliveryRepository {
 
     final scheduled = sub.isActiveOn(date);
     final onVacation = flat.isOnVacation(key);
+    final onFestival =
+        flat.pauseOnFestivals && IndianHolidays.isHoliday(key);
     DeliveryStatus initialStatus;
-    if (flat.status != FlatStatus.active || onVacation || !scheduled) {
+    if (flat.status != FlatStatus.active ||
+        onVacation ||
+        onFestival ||
+        !scheduled) {
       initialStatus = DeliveryStatus.paused;
     } else {
       initialStatus = DeliveryStatus.pending;
@@ -105,6 +111,7 @@ class DeliveryRepository {
     // and keeps Today's Route + audit log clean.
     final persist = flat.status != FlatStatus.stopped &&
         !onVacation &&
+        !onFestival &&
         scheduled;
     if (persist) {
       LocalStore.instance.deliveries.put(fresh.id, fresh.toJson());
@@ -120,16 +127,53 @@ class DeliveryRepository {
     final today = AppDates.today();
     final todayKey = AppDates.dateKey(today);
     final out = <DailyDelivery>[];
+    final isFestival = IndianHolidays.isHoliday(todayKey);
     for (final f in flats) {
       if (f.status == FlatStatus.stopped) continue;
       if (f.isOnVacation(todayKey)) continue;
+      if (f.pauseOnFestivals && isFestival) continue;
       final subs = _subscriptions.activeForFlat(f.id);
       for (final s in subs) {
         if (!s.isActiveOn(today)) continue;
         out.add(ensureForSubscription(f, s));
       }
     }
+    // One-time rows persisted earlier (createOneTime) will surface through
+    // watchForDate alongside the scheduled rows above.
     return out;
+  }
+
+  /// Creates a standalone delivery row not tied to a recurring subscription —
+  /// e.g. "1 extra L tomorrow". Marked `isOneTime` so the route can tag it.
+  Future<DailyDelivery> createOneTime({
+    required Flat flat,
+    required String productId,
+    required double quantity,
+    required double unitPrice,
+    required DateTime when,
+    required AppUser actor,
+  }) async {
+    final key = AppDates.dateKey(when);
+    final row = DailyDelivery(
+      id: _uuid.v4(),
+      flatId: flat.id,
+      productId: productId,
+      dateKey: key,
+      plannedQuantity: quantity,
+      actualQuantity: 0,
+      unitPrice: unitPrice,
+      status: DeliveryStatus.pending,
+      isOneTime: true,
+    );
+    await _persist(row);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.oneTimeOrder,
+      oldValue: '-',
+      newValue: '$quantity x $productId on $key',
+    );
+    return row;
   }
 
   Future<DailyDelivery> markDelivered(
@@ -309,6 +353,106 @@ class DeliveryRepository {
     return updated;
   }
 
+  /// Aggregate stats for [date] across all flats — used by the milkman's
+  /// daily revenue dashboard. Counts delivered/skipped, sums revenue, and
+  /// breaks down collected wallet credits by reason keyword.
+  DailyStats dailyStats(DateTime date) {
+    final key = AppDates.dateKey(date);
+    final rows = LocalStore.instance.deliveries.values
+        .whereType<Map>()
+        .map(DailyDelivery.fromJson)
+        .where((d) => d.dateKey == key)
+        .toList();
+    int delivered = 0, skipped = 0;
+    double revenue = 0;
+    for (final r in rows) {
+      switch (r.status) {
+        case DeliveryStatus.delivered:
+          delivered++;
+          revenue += r.actualQuantity * r.unitPrice;
+          break;
+        case DeliveryStatus.paused:
+        case DeliveryStatus.skipped:
+          skipped++;
+          break;
+        case DeliveryStatus.milkmanAbsent:
+        case DeliveryStatus.pending:
+          break;
+      }
+    }
+
+    // Wallet collections today, bucketed by payment method captured in the
+    // reason string ("cash payment", "upi payment", "bank payment").
+    final txnsBox = LocalStore.instance.walletTxns;
+    double cash = 0, upi = 0, bank = 0;
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    for (final raw in txnsBox.values.whereType<Map>()) {
+      final ts = raw['timestamp'];
+      if (ts is! String) continue;
+      final t = DateTime.tryParse(ts);
+      if (t == null || t.isBefore(startOfDay) || !t.isBefore(endOfDay)) {
+        continue;
+      }
+      final type = raw['type'];
+      if (type != 'topup') continue;
+      final amount = (raw['amount'] as num?)?.toDouble() ?? 0;
+      final reason = (raw['reason'] as String? ?? '').toLowerCase();
+      if (reason.contains('cash')) {
+        cash += amount;
+      } else if (reason.contains('upi')) {
+        upi += amount;
+      } else if (reason.contains('bank')) {
+        bank += amount;
+      } else {
+        cash += amount;
+      }
+    }
+
+    // Outstanding dues = negative wallet balances across all flats. Wallet
+    // credits held = positive balances (money customers prepaid that we owe
+    // back as service).
+    double dues = 0, credits = 0;
+    for (final raw in LocalStore.instance.flats.values.whereType<Map>()) {
+      final f = Flat.fromJson(raw);
+      if (f.walletBalance < 0) {
+        dues += -f.walletBalance;
+      } else {
+        credits += f.walletBalance;
+      }
+    }
+
+    return DailyStats(
+      dateKey: key,
+      delivered: delivered,
+      skipped: skipped,
+      revenue: revenue,
+      cashIn: cash,
+      upiIn: upi,
+      bankIn: bank,
+      duesOutstanding: dues,
+      walletCreditsHeld: credits,
+    );
+  }
+
+  /// Per-product quantity totals needed to fulfil [date] across all flats.
+  /// Skips paused / skipped / absent rows.
+  Map<String, double> inventoryFor(DateTime date) {
+    final key = AppDates.dateKey(date);
+    final out = <String, double>{};
+    for (final raw in LocalStore.instance.deliveries.values.whereType<Map>()) {
+      final d = DailyDelivery.fromJson(raw);
+      if (d.dateKey != key) continue;
+      if (d.status == DeliveryStatus.paused ||
+          d.status == DeliveryStatus.skipped ||
+          d.status == DeliveryStatus.milkmanAbsent) {
+        continue;
+      }
+      out[d.productId] = (out[d.productId] ?? 0) + d.plannedQuantity;
+    }
+    return out;
+  }
+
   /// Returns the last [count] monthly summaries for a flat, oldest first.
   /// Useful for the subscriber's spend tracker chart.
   List<MonthlySummary> recentMonths(String flatId, int count, DateTime anchor) {
@@ -460,4 +604,30 @@ class MonthlySummary {
   final double amountDue;
   final int daysCustom;
   final double pricePerLitre;
+}
+
+class DailyStats {
+  DailyStats({
+    required this.dateKey,
+    required this.delivered,
+    required this.skipped,
+    required this.revenue,
+    required this.cashIn,
+    required this.upiIn,
+    required this.bankIn,
+    required this.duesOutstanding,
+    required this.walletCreditsHeld,
+  });
+
+  final String dateKey;
+  final int delivered;
+  final int skipped;
+  final double revenue;
+  final double cashIn;
+  final double upiIn;
+  final double bankIn;
+  final double duesOutstanding;
+  final double walletCreditsHeld;
+
+  double get collectedTotal => cashIn + upiIn + bankIn;
 }

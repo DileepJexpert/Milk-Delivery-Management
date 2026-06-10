@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/localization/app_localizations.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/indian_holidays.dart';
 import '../../core/utils/upi_link.dart';
 import '../../data/models/daily_delivery.dart';
 import '../../data/models/flat.dart';
@@ -40,6 +41,8 @@ class TodayScreen extends ConsumerWidget {
         if (milkmanOff) const SizedBox(height: 12),
 
         _VacationCard(flat: flat, onVacation: onVacation),
+        const SizedBox(height: 8),
+        _FestivalToggle(flat: flat),
         const SizedBox(height: 12),
 
         if (flat.billingMode == BillingMode.prepaid)
@@ -324,8 +327,115 @@ class _ActionGrid extends ConsumerWidget {
           label: t.t('change_quantity'),
           onTap: () => _submitQuantity(context, ref),
         ),
+        _BigButton(
+          icon: Icons.add_shopping_cart,
+          label: t.t('add_one_time'),
+          onTap: () => _submitOneTime(context, ref),
+        ),
       ],
     );
+  }
+
+  Future<void> _submitOneTime(BuildContext context, WidgetRef ref) async {
+    final t = AppLocalizations.of(context);
+    final subs = ref
+            .read(mySubscriptionsProvider)
+            .valueOrNull
+            ?.where((s) => s.status.name == 'active')
+            .toList() ??
+        const [];
+    if (subs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('no_subscriptions'))),
+      );
+      return;
+    }
+    final products =
+        ref.read(productsProvider).valueOrNull ?? const <Product>[];
+    final productsById = {for (final p in products) p.id: p};
+    final qty = TextEditingController(text: subs.first.quantity.toString());
+    String chosen = subs.first.productId;
+    DateTime when = AppDates.today();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => AlertDialog(
+          title: Text(t.t('add_one_time')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: chosen,
+                  decoration: InputDecoration(labelText: t.t('products')),
+                  items: subs
+                      .map((s) => DropdownMenuItem(
+                            value: s.productId,
+                            child: Text(productsById[s.productId]?.name ?? '—'),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setInner(() => chosen = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: qty,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration:
+                      InputDecoration(labelText: t.t('change_qty_dialog')),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.calendar_today, size: 16),
+                  label: Text(AppDates.dateKey(when)),
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: when,
+                      firstDate: AppDates.today(),
+                      lastDate:
+                          AppDates.today().add(const Duration(days: 30)),
+                    );
+                    if (picked != null) setInner(() => when = picked);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(t.t('cancel'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(t.t('save'))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final q = double.tryParse(qty.text);
+    if (q == null || q <= 0) return;
+    final actor = ref.read(sessionControllerProvider).user;
+    if (actor == null) return;
+    final matching = subs.firstWhere((s) => s.productId == chosen);
+    await ref.read(deliveryRepositoryProvider).createOneTime(
+          flat: flat,
+          productId: chosen,
+          quantity: q,
+          unitPrice: matching.unitPrice,
+          when: when,
+          actor: actor,
+        );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('one_time_added'))),
+      );
+    }
   }
 
   Future<void> _submitPause(BuildContext context, WidgetRef ref,
@@ -541,5 +651,38 @@ class _VacationCard extends ConsumerWidget {
         SnackBar(content: Text(t.t('vacation_started'))),
       );
     }
+  }
+}
+
+class _FestivalToggle extends ConsumerWidget {
+  const _FestivalToggle({required this.flat});
+  final Flat flat;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final todayKey = AppDates.dateKey(AppDates.today());
+    final festivalName = IndianHolidays.nameFor(todayKey);
+    return Card(
+      child: SwitchListTile(
+        secondary: Icon(
+          Icons.celebration_outlined,
+          color: festivalName != null ? Colors.amber.shade700 : null,
+        ),
+        title: Text(t.t('pause_on_festivals')),
+        subtitle: festivalName != null
+            ? Text('${t.t('festival_today')}: $festivalName',
+                style: TextStyle(color: Colors.amber.shade800))
+            : Text(t.t('pause_on_festivals_explainer')),
+        value: flat.pauseOnFestivals,
+        onChanged: (v) async {
+          final actor = ref.read(sessionControllerProvider).user;
+          if (actor == null) return;
+          await ref
+              .read(flatRepositoryProvider)
+              .setPauseOnFestivals(flat, actor, v);
+        },
+      ),
+    );
   }
 }

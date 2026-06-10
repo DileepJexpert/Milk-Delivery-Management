@@ -58,6 +58,10 @@
   <string>Used to capture delivery proof photos (bottle at door etc.).</string>
   <key>NSPhotoLibraryUsageDescription</key>
   <string>Used to attach delivery proof photos from your gallery.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Used for voice commands to skip or modify deliveries.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Used to transcribe voice commands.</string>
   <key>CFBundleLocalizations</key>
   <array>
     <string>en</string>

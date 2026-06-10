@@ -14,6 +14,7 @@ class DailyDelivery {
     required this.status,
     this.deliveredAt,
     this.proofPhotoB64,
+    this.isOneTime = false,
   });
 
   final String id;
@@ -39,6 +40,11 @@ class DailyDelivery {
   /// a file path so it survives across web origins and lazily syncs to remote.
   final String? proofPhotoB64;
 
+  /// True for one-time / extra orders (not driven by a subscription). The
+  /// route screen tags these with a "1×" badge so the milkman knows it's
+  /// a one-off ask.
+  final bool isOneTime;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'flatId': flatId,
@@ -50,6 +56,7 @@ class DailyDelivery {
         'status': status.name,
         'deliveredAt': deliveredAt?.toIso8601String(),
         'proofPhotoB64': proofPhotoB64,
+        'isOneTime': isOneTime,
       };
 
   factory DailyDelivery.fromJson(Map json) => DailyDelivery(
@@ -68,6 +75,7 @@ class DailyDelivery {
             ? null
             : DateTime.parse(json['deliveredAt'] as String),
         proofPhotoB64: json['proofPhotoB64'] as String?,
+        isOneTime: json['isOneTime'] as bool? ?? false,
       );
 
   DailyDelivery copyWith({
@@ -78,6 +86,7 @@ class DailyDelivery {
     DeliveryStatus? status,
     DateTime? deliveredAt,
     String? proofPhotoB64,
+    bool? isOneTime,
   }) =>
       DailyDelivery(
         id: id,
@@ -90,5 +99,6 @@ class DailyDelivery {
         status: status ?? this.status,
         deliveredAt: deliveredAt ?? this.deliveredAt,
         proofPhotoB64: proofPhotoB64 ?? this.proofPhotoB64,
+        isOneTime: isOneTime ?? this.isOneTime,
       );
 }

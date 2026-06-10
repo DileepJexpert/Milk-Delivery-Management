@@ -24,6 +24,7 @@ class Flat {
     this.walletBalance = 0,
     this.vacationFromKey,
     this.vacationToKey,
+    this.pauseOnFestivals = false,
   });
 
   final String id;
@@ -59,6 +60,10 @@ class Flat {
   final String? vacationFromKey;
   final String? vacationToKey;
 
+  /// When true, deliveries are auto-paused on major Indian festivals
+  /// (see IndianHolidays utility).
+  final bool pauseOnFestivals;
+
   bool get isStandalone => societyId == null || societyId!.isEmpty;
 
   /// True if [date] (yyyy-MM-dd) falls inside the vacation range.
@@ -83,6 +88,7 @@ class Flat {
         'walletBalance': walletBalance,
         'vacationFromKey': vacationFromKey,
         'vacationToKey': vacationToKey,
+        'pauseOnFestivals': pauseOnFestivals,
       };
 
   factory Flat.fromJson(Map json) {
@@ -109,6 +115,7 @@ class Flat {
       walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0,
       vacationFromKey: json['vacationFromKey'] as String?,
       vacationToKey: json['vacationToKey'] as String?,
+      pauseOnFestivals: json['pauseOnFestivals'] as bool? ?? false,
     );
   }
 
@@ -126,6 +133,7 @@ class Flat {
     Object? societyId = _sentinel,
     Object? vacationFromKey = _sentinel,
     Object? vacationToKey = _sentinel,
+    bool? pauseOnFestivals,
   }) =>
       Flat(
         id: id,
@@ -147,6 +155,7 @@ class Flat {
         vacationToKey: identical(vacationToKey, _sentinel)
             ? this.vacationToKey
             : vacationToKey as String?,
+        pauseOnFestivals: pauseOnFestivals ?? this.pauseOnFestivals,
       );
 
   static const _sentinel = Object();

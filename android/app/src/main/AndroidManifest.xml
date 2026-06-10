@@ -6,7 +6,11 @@
          image_picker can read its temp file on older Android versions. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <!-- Voice command via speech_to_text -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.BLUETOOTH"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
 
     <queries>
         <!-- WhatsApp deep links via url_launcher -->
@@ -21,6 +25,10 @@
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="upi"/>
+        </intent>
+        <!-- Speech recognizer for voice command -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 

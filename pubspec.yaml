@@ -44,6 +44,9 @@ dependencies:
   # Photo capture for delivery proof
   image_picker: ^1.1.2
 
+  # Voice command (uses platform speech APIs; web uses Web Speech)
+  speech_to_text: ^7.0.0
+
   cupertino_icons: ^1.0.6
 
 dev_dependencies:

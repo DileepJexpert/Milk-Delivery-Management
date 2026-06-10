@@ -16,6 +16,9 @@ import '../../../providers/repository_providers.dart';
 import '../../auth/session_controller.dart';
 import '../absences/broadcast_absence_screen.dart';
 import '../absences/manage_absences_screen.dart';
+import '../dashboard/daily_revenue_screen.dart';
+import '../dashboard/inventory_screen.dart';
+import '../quick/quick_command_dialog.dart';
 
 class TodaysRouteScreen extends ConsumerStatefulWidget {
   const TodaysRouteScreen({super.key});
@@ -93,6 +96,8 @@ class _TodaysRouteScreenState extends ConsumerState<TodaysRouteScreen> {
       padding: const EdgeInsets.all(12),
       children: [
         if (isOffToday) const _OffTodayBanner() else const _OffTodayCta(),
+        const SizedBox(height: 8),
+        _SummaryStrip(onQuickCommand: () => showQuickCommand(context, ref)),
         const SizedBox(height: 12),
         // Search bar
         TextField(
@@ -432,10 +437,34 @@ class _ProductRow extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (row.isOneTime)
+                        Container(
+                          margin: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            '1×',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   Text(
                     status == DeliveryStatus.delivered
@@ -714,5 +743,108 @@ class _OffTodayBanner extends ConsumerWidget {
     if (hit != null) {
       await ref.read(absenceRepositoryProvider).delete(hit.id, actor);
     }
+  }
+}
+
+class _SummaryStrip extends ConsumerWidget {
+  const _SummaryStrip({required this.onQuickCommand});
+  final VoidCallback onQuickCommand;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final stats =
+        ref.watch(deliveryRepositoryProvider).dailyStats(AppDates.today());
+
+    Widget tile(
+      String title,
+      String value,
+      IconData icon,
+      Color color,
+      VoidCallback onTap,
+    ) =>
+        Expanded(
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(icon, size: 16, color: color),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tile(
+          t.t('todays_revenue'),
+          '₹${stats.revenue.toStringAsFixed(0)}',
+          Icons.trending_up,
+          Colors.green.shade700,
+          () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const DailyRevenueScreen(),
+          )),
+        ),
+        const SizedBox(width: 6),
+        tile(
+          t.t('tomorrows_inventory'),
+          '${stats.delivered}/${stats.delivered + stats.skipped}',
+          Icons.inventory_2_outlined,
+          Colors.indigo,
+          () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const InventoryScreen(),
+          )),
+        ),
+        const SizedBox(width: 6),
+        Card(
+          margin: EdgeInsets.zero,
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onQuickCommand,
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              child: Icon(
+                Icons.bolt,
+                size: 24,
+                color: Theme.of(context).colorScheme.onTertiaryContainer,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

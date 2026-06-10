@@ -196,6 +196,24 @@ class FlatRepository {
     return updated;
   }
 
+  Future<Flat> setPauseOnFestivals(
+    Flat flat,
+    AppUser actor,
+    bool enabled,
+  ) async {
+    if (flat.pauseOnFestivals == enabled) return flat;
+    final updated = flat.copyWith(pauseOnFestivals: enabled);
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.festivalAutoPauseChanged,
+      oldValue: flat.pauseOnFestivals.toString(),
+      newValue: enabled.toString(),
+    );
+    return updated;
+  }
+
   Future<Flat> setBillingMode(
     Flat flat,
     AppUser actor,

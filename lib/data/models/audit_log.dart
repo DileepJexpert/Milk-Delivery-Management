@@ -25,6 +25,8 @@ enum AuditChangeType {
   walletTopup,
   walletDebit,
   walletRefund,
+  vacationStarted,
+  vacationEnded,
 }
 
 class AuditLog {

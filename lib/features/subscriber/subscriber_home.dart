@@ -7,6 +7,7 @@ import '../../core/localization/locale_controller.dart';
 import '../../providers/data_providers.dart';
 import '../auth/session_controller.dart';
 import 'bill_screen.dart';
+import 'calendar_screen.dart';
 import 'history_screen.dart';
 import 'today_screen.dart';
 
@@ -103,11 +104,13 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
 
     final pages = const [
       TodayScreen(),
+      CalendarScreen(),
       HistoryScreen(),
       BillScreen(),
     ];
     final titles = [
       t.t('subscriber_today'),
+      t.t('calendar'),
       t.t('subscriber_history'),
       t.t('subscriber_bill'),
     ];
@@ -123,6 +126,11 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
             icon: const Icon(Icons.today_outlined),
             selectedIcon: const Icon(Icons.today),
             label: t.t('subscriber_today'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.calendar_month_outlined),
+            selectedIcon: const Icon(Icons.calendar_month),
+            label: t.t('calendar'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.history),

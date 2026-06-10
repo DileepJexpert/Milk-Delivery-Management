@@ -49,6 +49,8 @@ class SubscriptionRepository {
     required String productId,
     required double quantity,
     required double unitPrice,
+    SchedulePattern pattern = SchedulePattern.daily,
+    List<int> weekDays = const [1, 2, 3, 4, 5, 6, 7],
     AppUser? actor,
   }) async {
     final s = Subscription(
@@ -59,6 +61,8 @@ class SubscriptionRepository {
       unitPrice: unitPrice,
       status: SubscriptionStatus.active,
       createdAt: DateTime.now(),
+      pattern: pattern,
+      weekDays: weekDays,
     );
     await _persist(s);
     if (actor != null) {
@@ -67,7 +71,8 @@ class SubscriptionRepository {
         actor: actor,
         type: AuditChangeType.subscriptionAdded,
         oldValue: '-',
-        newValue: 'product=$productId qty=$quantity @ ₹$unitPrice',
+        newValue:
+            'product=$productId qty=$quantity @ ₹$unitPrice · ${pattern.name}',
       );
     }
     return s;
@@ -78,15 +83,23 @@ class SubscriptionRepository {
     AppUser actor, {
     double? quantity,
     double? unitPrice,
+    SchedulePattern? pattern,
+    List<int>? weekDays,
   }) async {
-    final updated = s.copyWith(quantity: quantity, unitPrice: unitPrice);
+    final updated = s.copyWith(
+      quantity: quantity,
+      unitPrice: unitPrice,
+      pattern: pattern,
+      weekDays: weekDays,
+    );
     await _persist(updated);
     await _audit.log(
       flatId: s.flatId,
       actor: actor,
       type: AuditChangeType.subscriptionUpdated,
-      oldValue: 'qty=${s.quantity} @ ₹${s.unitPrice}',
-      newValue: 'qty=${updated.quantity} @ ₹${updated.unitPrice}',
+      oldValue: 'qty=${s.quantity} @ ₹${s.unitPrice} · ${s.pattern.name}',
+      newValue:
+          'qty=${updated.quantity} @ ₹${updated.unitPrice} · ${updated.pattern.name}',
     );
     return updated;
   }

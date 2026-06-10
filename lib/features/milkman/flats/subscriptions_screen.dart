@@ -105,6 +105,10 @@ class SubscriptionsScreen extends ConsumerWidget {
       text: existing?.unitPrice.toString() ??
           activeProducts.first.defaultPrice.toString(),
     );
+    SchedulePattern pattern = existing?.pattern ?? SchedulePattern.daily;
+    final customDays = <int>{
+      ...(existing?.weekDays ?? const [1, 2, 3, 4, 5, 6, 7])
+    };
 
     final ok = await showDialog<bool>(
       context: context,
@@ -165,6 +169,42 @@ class SubscriptionsScreen extends ConsumerWidget {
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(labelText: t.t('unit_price')),
                 ),
+                const SizedBox(height: 16),
+                Text(t.t('schedule'),
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<SchedulePattern>(
+                  value: pattern,
+                  items: SchedulePattern.values
+                      .map((p) => DropdownMenuItem(
+                            value: p,
+                            child: Text(t.t(p.key)),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setInner(() => pattern = v);
+                  },
+                ),
+                if (pattern == SchedulePattern.custom) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 4,
+                    children: [
+                      for (int d = 1; d <= 7; d++)
+                        FilterChip(
+                          label: Text(_weekdayShort(d, t)),
+                          selected: customDays.contains(d),
+                          onSelected: (v) => setInner(() {
+                            if (v) {
+                              customDays.add(d);
+                            } else {
+                              customDays.remove(d);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -186,12 +226,16 @@ class SubscriptionsScreen extends ConsumerWidget {
     final actor = ref.read(sessionControllerProvider).user!;
     final repo = ref.read(subscriptionRepositoryProvider);
 
+    final daysList = customDays.toList()..sort();
     if (existing == null) {
       await repo.create(
         flatId: flatId,
         productId: productId,
         quantity: qty,
         unitPrice: price,
+        pattern: pattern,
+        weekDays:
+            daysList.isEmpty ? const [1, 2, 3, 4, 5, 6, 7] : daysList,
         actor: actor,
       );
       if (context.mounted) {
@@ -199,7 +243,15 @@ class SubscriptionsScreen extends ConsumerWidget {
             SnackBar(content: Text(t.t('subscription_added'))));
       }
     } else {
-      await repo.update(existing, actor, quantity: qty, unitPrice: price);
+      await repo.update(
+        existing,
+        actor,
+        quantity: qty,
+        unitPrice: price,
+        pattern: pattern,
+        weekDays:
+            daysList.isEmpty ? const [1, 2, 3, 4, 5, 6, 7] : daysList,
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(t.t('subscription_updated'))));
@@ -267,8 +319,20 @@ class _SubTile extends StatelessWidget {
             decoration: stopped ? TextDecoration.lineThrough : null,
           ),
         ),
-        subtitle: Text(
-          '${s.quantity} $unit/day · ₹${s.unitPrice.toStringAsFixed(2)} / $unit',
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${s.quantity} $unit · ₹${s.unitPrice.toStringAsFixed(2)} / $unit',
+            ),
+            Text(
+              _scheduleLabel(s, t),
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -296,5 +360,34 @@ class _SubTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+String _scheduleLabel(Subscription s, AppLocalizations t) {
+  if (s.pattern == SchedulePattern.custom) {
+    final days = s.weekDays.map((d) => _weekdayShort(d, t)).join(' ');
+    return '${t.t(s.pattern.key)} · $days';
+  }
+  return t.t(s.pattern.key);
+}
+
+String _weekdayShort(int day, AppLocalizations t) {
+  switch (day) {
+    case 1:
+      return t.t('mon');
+    case 2:
+      return t.t('tue');
+    case 3:
+      return t.t('wed');
+    case 4:
+      return t.t('thu');
+    case 5:
+      return t.t('fri');
+    case 6:
+      return t.t('sat');
+    case 7:
+      return t.t('sun');
+    default:
+      return '?';
   }
 }

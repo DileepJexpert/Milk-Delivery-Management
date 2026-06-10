@@ -156,6 +156,46 @@ class FlatRepository {
     return updated;
   }
 
+  Future<Flat> startVacation(
+    Flat flat,
+    AppUser actor,
+    DateTime from,
+    DateTime to,
+  ) async {
+    String key(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final updated = flat.copyWith(
+      vacationFromKey: key(from),
+      vacationToKey: key(to),
+    );
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.vacationStarted,
+      oldValue: flat.vacationFromKey == null ? '-' : 'previous vacation',
+      newValue: '${key(from)} → ${key(to)}',
+    );
+    return updated;
+  }
+
+  Future<Flat> endVacation(Flat flat, AppUser actor) async {
+    if (flat.vacationFromKey == null) return flat;
+    final updated = flat.copyWith(
+      vacationFromKey: null,
+      vacationToKey: null,
+    );
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.vacationEnded,
+      oldValue: '${flat.vacationFromKey} → ${flat.vacationToKey}',
+      newValue: 'cancelled',
+    );
+    return updated;
+  }
+
   Future<Flat> setBillingMode(
     Flat flat,
     AppUser actor,

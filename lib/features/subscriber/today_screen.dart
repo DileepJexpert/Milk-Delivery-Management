@@ -31,11 +31,16 @@ class TodayScreen extends ConsumerWidget {
     final today = AppDates.dateKey(AppDates.today());
     final milkmanOff = ref.watch(isMyMilkmanAbsentTodayProvider);
 
+    final onVacation = flat.isOnVacation(today);
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (milkmanOff) const _MilkmanOffBanner(),
         if (milkmanOff) const SizedBox(height: 12),
+
+        _VacationCard(flat: flat, onVacation: onVacation),
+        const SizedBox(height: 12),
 
         if (flat.billingMode == BillingMode.prepaid)
           _WalletStrip(flat: flat),
@@ -454,5 +459,87 @@ class _BigButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _VacationCard extends ConsumerWidget {
+  const _VacationCard({required this.flat, required this.onVacation});
+
+  final Flat flat;
+  final bool onVacation;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    if (onVacation) {
+      return Card(
+        color: Colors.purple.withOpacity(0.12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.beach_access, size: 28, color: Colors.purple),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t.t('on_vacation'),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(
+                      '${flat.vacationFromKey} -> ${flat.vacationToKey}',
+                      style: TextStyle(
+                          color: scheme.outline, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final actor = ref.read(sessionControllerProvider).user;
+                  if (actor == null) return;
+                  await ref
+                      .read(flatRepositoryProvider)
+                      .endVacation(flat, actor);
+                },
+                child: Text(t.t('cancel_vacation')),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.beach_access_outlined),
+        title: Text(t.t('vacation_mode')),
+        subtitle: Text(t.t('vacation_explainer')),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _startVacation(context, ref),
+      ),
+    );
+  }
+
+  Future<void> _startVacation(BuildContext context, WidgetRef ref) async {
+    final t = AppLocalizations.of(context);
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 180)),
+      helpText: t.t('vacation_mode'),
+    );
+    if (picked == null) return;
+    final actor = ref.read(sessionControllerProvider).user;
+    if (actor == null) return;
+    await ref
+        .read(flatRepositoryProvider)
+        .startVacation(flat, actor, picked.start, picked.end);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('vacation_started'))),
+      );
+    }
   }
 }

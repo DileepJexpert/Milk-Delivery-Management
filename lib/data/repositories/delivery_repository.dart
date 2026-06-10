@@ -63,7 +63,9 @@ class DeliveryRepository {
       _subscriptions.activeForFlat(flatId);
 
   /// Returns the row for a specific (flat, product, date) — creating it from
-  /// the active subscription if it doesn't exist yet.
+  /// the active subscription if it doesn't exist yet. Respects the
+  /// subscription's schedule pattern and the flat's vacation range — if the
+  /// product isn't scheduled today, returns a paused row without persisting.
   DailyDelivery ensureForSubscription(
     Flat flat,
     Subscription sub, {
@@ -81,33 +83,49 @@ class DeliveryRepository {
         .toList();
     if (existing.isNotEmpty) return existing.first;
 
-    final initialStatus = flat.status == FlatStatus.active
-        ? DeliveryStatus.pending
-        : DeliveryStatus.paused;
+    final scheduled = sub.isActiveOn(date);
+    final onVacation = flat.isOnVacation(key);
+    DeliveryStatus initialStatus;
+    if (flat.status != FlatStatus.active || onVacation || !scheduled) {
+      initialStatus = DeliveryStatus.paused;
+    } else {
+      initialStatus = DeliveryStatus.pending;
+    }
     final fresh = DailyDelivery(
       id: _uuid.v4(),
       flatId: flat.id,
       productId: sub.productId,
       dateKey: key,
-      plannedQuantity: sub.quantity,
+      plannedQuantity: scheduled ? sub.quantity : 0,
       actualQuantity: 0,
       unitPrice: sub.unitPrice,
       status: initialStatus,
     );
-    if (flat.status != FlatStatus.stopped) {
+    // Don't persist non-billable / off-schedule rows — keeps the box small
+    // and keeps Today's Route + audit log clean.
+    final persist = flat.status != FlatStatus.stopped &&
+        !onVacation &&
+        scheduled;
+    if (persist) {
       LocalStore.instance.deliveries.put(fresh.id, fresh.toJson());
     }
     return fresh;
   }
 
   /// For every active subscription on every (non-stopped) flat, ensure a
-  /// delivery row exists for today.
+  /// delivery row exists for today — skipping subscriptions that aren't
+  /// scheduled today (alternate days, weekday-only, etc.) and flats on
+  /// vacation.
   Future<List<DailyDelivery>> ensureRouteForToday(List<Flat> flats) async {
+    final today = AppDates.today();
+    final todayKey = AppDates.dateKey(today);
     final out = <DailyDelivery>[];
     for (final f in flats) {
       if (f.status == FlatStatus.stopped) continue;
+      if (f.isOnVacation(todayKey)) continue;
       final subs = _subscriptions.activeForFlat(f.id);
       for (final s in subs) {
+        if (!s.isActiveOn(today)) continue;
         out.add(ensureForSubscription(f, s));
       }
     }
@@ -137,7 +155,10 @@ class DeliveryRepository {
       newValue: '${updated.status.name} ${updated.actualQuantity}',
       reason: reason,
     );
-    // Auto-debit for prepaid flats.
+    // Auto-debit for prepaid flats. We debit the actual delivered quantity
+    // (not the planned), so the customer is never overcharged. The
+    // short-delivery auto-credit lives in setQuantity below, which fires when
+    // an already-delivered row is later corrected.
     final flat = _flats.byId(row.flatId);
     if (flat != null &&
         flat.billingMode == BillingMode.prepaid &&
@@ -244,10 +265,11 @@ class DeliveryRepository {
     double qty, {
     String? reason,
   }) async {
+    final wasDelivered = row.status == DeliveryStatus.delivered;
+    final oldActual = row.actualQuantity;
     final updated = row.copyWith(
       plannedQuantity: qty,
-      actualQuantity:
-          row.status == DeliveryStatus.delivered ? qty : row.actualQuantity,
+      actualQuantity: wasDelivered ? qty : row.actualQuantity,
     );
     await _persist(updated);
     await _audit.log(
@@ -258,7 +280,44 @@ class DeliveryRepository {
       newValue: '${updated.plannedQuantity}',
       reason: reason,
     );
+    // Short-delivery auto-credit (or top-up debit): if we corrected an
+    // already-delivered row up/down, settle the wallet difference for prepaid
+    // flats so the customer never has to ask.
+    if (wasDelivered && updated.unitPrice > 0) {
+      final flat = _flats.byId(row.flatId);
+      if (flat != null && flat.billingMode == BillingMode.prepaid) {
+        final delta = qty - oldActual;
+        if (delta < 0) {
+          await _wallet.refund(
+            flat,
+            actor,
+            -delta * updated.unitPrice,
+            relatedDeliveryId: updated.id,
+            reason: 'short-delivery auto-credit ($oldActual→$qty)',
+          );
+        } else if (delta > 0) {
+          await _wallet.debit(
+            flat,
+            actor,
+            delta * updated.unitPrice,
+            relatedDeliveryId: updated.id,
+            reason: 'qty correction debit ($oldActual→$qty)',
+          );
+        }
+      }
+    }
     return updated;
+  }
+
+  /// Returns the last [count] monthly summaries for a flat, oldest first.
+  /// Useful for the subscriber's spend tracker chart.
+  List<MonthlySummary> recentMonths(String flatId, int count, DateTime anchor) {
+    final out = <MonthlySummary>[];
+    for (int i = count - 1; i >= 0; i--) {
+      final m = DateTime(anchor.year, anchor.month - i, 1);
+      out.add(summary(flatId, m));
+    }
+    return out;
   }
 
   Future<void> _persist(DailyDelivery d) async {

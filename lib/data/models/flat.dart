@@ -22,6 +22,8 @@ class Flat {
     this.status = FlatStatus.active,
     this.billingMode = BillingMode.postpaid,
     this.walletBalance = 0,
+    this.vacationFromKey,
+    this.vacationToKey,
   });
 
   final String id;
@@ -52,7 +54,19 @@ class Flat {
   /// but we cache here to avoid recomputing on every UI rebuild.
   final double walletBalance;
 
+  /// Vacation mode: subscriber away from `vacationFromKey` to `vacationToKey`
+  /// (inclusive, yyyy-MM-dd). All products pause for these dates.
+  final String? vacationFromKey;
+  final String? vacationToKey;
+
   bool get isStandalone => societyId == null || societyId!.isEmpty;
+
+  /// True if [date] (yyyy-MM-dd) falls inside the vacation range.
+  bool isOnVacation(String dateKey) {
+    if (vacationFromKey == null || vacationToKey == null) return false;
+    return dateKey.compareTo(vacationFromKey!) >= 0 &&
+        dateKey.compareTo(vacationToKey!) <= 0;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -67,6 +81,8 @@ class Flat {
         'status': status.name,
         'billingMode': billingMode.name,
         'walletBalance': walletBalance,
+        'vacationFromKey': vacationFromKey,
+        'vacationToKey': vacationToKey,
       };
 
   factory Flat.fromJson(Map json) {
@@ -91,6 +107,8 @@ class Flat {
         orElse: () => BillingMode.postpaid,
       ),
       walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0,
+      vacationFromKey: json['vacationFromKey'] as String?,
+      vacationToKey: json['vacationToKey'] as String?,
     );
   }
 
@@ -106,6 +124,8 @@ class Flat {
     BillingMode? billingMode,
     double? walletBalance,
     Object? societyId = _sentinel,
+    Object? vacationFromKey = _sentinel,
+    Object? vacationToKey = _sentinel,
   }) =>
       Flat(
         id: id,
@@ -121,6 +141,12 @@ class Flat {
         status: status ?? this.status,
         billingMode: billingMode ?? this.billingMode,
         walletBalance: walletBalance ?? this.walletBalance,
+        vacationFromKey: identical(vacationFromKey, _sentinel)
+            ? this.vacationFromKey
+            : vacationFromKey as String?,
+        vacationToKey: identical(vacationToKey, _sentinel)
+            ? this.vacationToKey
+            : vacationToKey as String?,
       );
 
   static const _sentinel = Object();

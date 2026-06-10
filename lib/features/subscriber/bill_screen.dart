@@ -105,6 +105,10 @@ class _BillScreenState extends ConsumerState<BillScreen> {
               ),
             ),
           ],
+          // ── Spend tracker (last 6 months) ─────────────────────────
+          const SizedBox(height: 16),
+          _SpendTracker(flatId: flat.id, anchor: _month),
+
           if (summary.products.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(t.t('per_product_breakdown'),
@@ -251,6 +255,90 @@ class _ProductBillLine extends StatelessWidget {
           Text('₹${subtotal.toStringAsFixed(2)}',
               style: const TextStyle(
                   fontSize: 16, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SpendTracker extends ConsumerWidget {
+  const _SpendTracker({required this.flatId, required this.anchor});
+  final String flatId;
+  final DateTime anchor;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final repo = ref.watch(deliveryRepositoryProvider);
+    final months = repo.recentMonths(flatId, 6, anchor);
+    final maxAmount = months.fold<double>(
+        0, (m, s) => s.totalAmount > m ? s.totalAmount : m);
+    if (maxAmount <= 0) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(t.t('spend_last_6_months'),
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 120,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (final m in months)
+                    Expanded(
+                      child: _Bar(
+                        amount: m.totalAmount,
+                        max: maxAmount,
+                        label: '${m.monthKey.substring(5)}',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar(
+      {required this.amount, required this.max, required this.label});
+  final double amount;
+  final double max;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final h = max <= 0 ? 0.0 : (amount / max) * 90;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (amount > 0)
+            Text(
+              '₹${amount.toStringAsFixed(0)}',
+              style: const TextStyle(fontSize: 10),
+            ),
+          const SizedBox(height: 2),
+          Container(
+            height: h.clamp(2, 90),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: scheme.primary.withOpacity(amount > 0 ? 0.7 : 0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 10)),
         ],
       ),
     );

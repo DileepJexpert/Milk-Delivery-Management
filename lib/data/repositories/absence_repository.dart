@@ -62,7 +62,9 @@ class AbsenceRepository {
     return LocalStore.instance.flats.values
         .whereType<Map>()
         .map(Flat.fromJson)
-        .where((f) => societyIds.contains(f.societyId));
+        // Society flats belonging to this milkman, plus all standalone flats
+        // (single-milkman app, so standalone customers implicitly belong here).
+        .where((f) => f.isStandalone || societyIds.contains(f.societyId));
   }
 
   Future<MilkmanAbsence> createRange({

@@ -115,15 +115,26 @@ final isMilkmanAbsentTodayProvider = Provider<bool>((ref) {
 });
 
 /// For a subscriber: who is the milkman that owns my flat's society?
+/// For standalone customers (no society), falls back to the single milkman
+/// user in the system (the app is designed for a single milkman managing all
+/// their customers, so this is unambiguous).
 final milkmanForSubscriberProvider = Provider<AppUser?>((ref) {
   final flat = ref.watch(myFlatProvider);
   if (flat == null) return null;
-  final raw = LocalStore.instance.societies.get(flat.societyId);
-  if (raw is! Map) return null;
-  final society = Society.fromJson(raw);
-  final userRaw = LocalStore.instance.users.get(society.milkmanId);
-  if (userRaw is! Map) return null;
-  return AppUser.fromJson(userRaw);
+  if (!flat.isStandalone) {
+    final raw = LocalStore.instance.societies.get(flat.societyId);
+    if (raw is Map) {
+      final society = Society.fromJson(raw);
+      final userRaw = LocalStore.instance.users.get(society.milkmanId);
+      if (userRaw is Map) return AppUser.fromJson(userRaw);
+    }
+  }
+  // Fallback: pick the (single) milkman user in the store.
+  for (final raw in LocalStore.instance.users.values.whereType<Map>()) {
+    final u = AppUser.fromJson(raw);
+    if (u.role == UserRole.milkman) return u;
+  }
+  return null;
 });
 
 /// Is *the subscriber's* milkman off today?

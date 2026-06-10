@@ -106,6 +106,8 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
     final flatNoCtrl = TextEditingController(text: flat.flatNumber);
     final ownerCtrl = TextEditingController(text: flat.ownerName);
     final phoneCtrl = TextEditingController(text: flat.ownerPhone);
+    final addressCtrl =
+        TextEditingController(text: flat.addressLine ?? '');
     final qtyCtrl = TextEditingController(text: flat.defaultQuantity.toString());
     final priceCtrl = TextEditingController(text: flat.pricePerLitre.toString());
     bool hasApp = flat.hasApp;
@@ -133,6 +135,14 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
                   decoration: InputDecoration(labelText: t.t('owner_phone')),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: addressCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: t.t('address_optional'),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -172,6 +182,9 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
           ownerName: ownerCtrl.text.trim().isEmpty ? null : ownerCtrl.text.trim(),
           ownerPhone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
           hasApp: hasApp,
+          addressLine: addressCtrl.text.trim().isEmpty
+              ? null
+              : addressCtrl.text.trim(),
           defaultQuantity: double.tryParse(qtyCtrl.text),
           pricePerLitre: double.tryParse(priceCtrl.text),
         );
@@ -269,7 +282,9 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Flat ${flat.flatNumber} — ${flat.ownerName}'),
+        title: Text(flat.isStandalone
+            ? '${flat.flatNumber} — ${flat.ownerName}'
+            : 'Flat ${flat.flatNumber} — ${flat.ownerName}'),
         actions: [
           IconButton(
             tooltip: t.t('edit_flat'),
@@ -338,6 +353,8 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _InfoRow(label: t.t('owner_phone'), value: flat.ownerPhone),
+                  if (flat.addressLine != null && flat.addressLine!.isNotEmpty)
+                    _InfoRow(label: t.t('address'), value: flat.addressLine!),
                   _InfoRow(label: t.t('default_quantity'), value: '${flat.defaultQuantity}L/day'),
                   _InfoRow(label: t.t('price_per_litre'), value: '₹${flat.pricePerLitre.toStringAsFixed(2)}/L'),
                   _InfoRow(label: 'App', value: flat.hasApp ? 'Yes' : 'No'),

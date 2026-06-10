@@ -60,6 +60,7 @@ class TodaysRouteScreen extends ConsumerWidget {
     }
 
     final grouped = groupBy(activeFlats, (f) => f.societyId);
+    final standaloneFlats = activeFlats.where((f) => f.isStandalone).toList();
     final isOffToday = ref.watch(isMilkmanAbsentTodayProvider);
 
     return ListView(
@@ -71,6 +72,13 @@ class TodaysRouteScreen extends ConsumerWidget {
           _SocietyBlock(
             society: society,
             flats: grouped[society.id] ?? const [],
+            rowsByFlat: rowsByFlat,
+            productsById: productsById,
+          ),
+        if (standaloneFlats.isNotEmpty)
+          _SocietyBlock(
+            society: null,
+            flats: standaloneFlats,
             rowsByFlat: rowsByFlat,
             productsById: productsById,
           ),
@@ -87,7 +95,7 @@ class _SocietyBlock extends ConsumerWidget {
     required this.productsById,
   });
 
-  final Society society;
+  final Society? society;
   final List<Flat> flats;
   final Map<String, List<DailyDelivery>> rowsByFlat;
   final Map<String, Product> productsById;
@@ -95,6 +103,8 @@ class _SocietyBlock extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (flats.isEmpty) return const SizedBox.shrink();
+    final t = AppLocalizations.of(context);
+    final label = society?.name ?? t.t('standalone_customers');
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -102,9 +112,20 @@ class _SocietyBlock extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              society.name,
-              style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Icon(
+                  society == null
+                      ? Icons.home_outlined
+                      : Icons.apartment_outlined,
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
             ),
             const Divider(height: 16),
             for (final f in flats)
@@ -159,10 +180,26 @@ class _FlatBlock extends ConsumerWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  'Flat ${flat.flatNumber} · ${flat.ownerName}',
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      flat.isStandalone
+                          ? '${flat.flatNumber} · ${flat.ownerName}'
+                          : 'Flat ${flat.flatNumber} · ${flat.ownerName}',
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    if (flat.addressLine != null &&
+                        flat.addressLine!.isNotEmpty)
+                      Text(
+                        flat.addressLine!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               if (isPrepaid)

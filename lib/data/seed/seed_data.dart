@@ -123,6 +123,29 @@ class SeedData {
         defaultQuantity: 1.0,
         pricePerLitre: 65,
       ),
+      // Standalone customers (no society) — house and a shop.
+      Flat(
+        id: _uuid.v4(),
+        societyId: null,
+        flatNumber: 'House 42',
+        ownerName: 'Anita Verma',
+        ownerPhone: '9666666666',
+        hasApp: false,
+        addressLine: 'Sector 14, near Saraswati Park',
+        defaultQuantity: 1.0,
+        pricePerLitre: 60,
+      ),
+      Flat(
+        id: _uuid.v4(),
+        societyId: null,
+        flatNumber: 'Sharma General Store',
+        ownerName: 'Mukesh Sharma',
+        ownerPhone: '9777777777',
+        hasApp: false,
+        addressLine: 'Main Market Road, Sector 8',
+        defaultQuantity: 3.0,
+        pricePerLitre: 60,
+      ),
     ];
     for (final f in flats) {
       await LocalStore.instance.flats.put(f.id, f.toJson());

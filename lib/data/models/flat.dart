@@ -2,6 +2,12 @@ enum FlatStatus { active, paused, stopped }
 
 enum BillingMode { prepaid, postpaid }
 
+/// A delivery point. Originally modelled as a flat in a society, now also
+/// supports standalone houses / shops — `societyId` may be null, and
+/// `addressLine` carries free-form location info (sector, street, landmark).
+/// `flatNumber` is the customer label the milkman writes down — for society
+/// flats it's the flat number ("A-101"), for standalone customers it can be
+/// anything ("House 42", "Sharma Stores", "Krishna Nilaya").
 class Flat {
   Flat({
     required this.id,
@@ -12,17 +18,25 @@ class Flat {
     required this.hasApp,
     required this.defaultQuantity,
     required this.pricePerLitre,
+    this.addressLine,
     this.status = FlatStatus.active,
     this.billingMode = BillingMode.postpaid,
     this.walletBalance = 0,
   });
 
   final String id;
-  final String societyId;
+
+  /// Null for standalone customers (houses with no society).
+  final String? societyId;
+
   final String flatNumber;
   final String ownerName;
   final String ownerPhone;
   final bool hasApp;
+
+  /// Free-form address (used mainly for standalone customers, optional for
+  /// society flats too).
+  final String? addressLine;
 
   /// Legacy: pre-multi-product daily quantity for cow milk. Kept for migration
   /// of existing data; new code should read the matching Subscription instead.
@@ -38,6 +52,8 @@ class Flat {
   /// but we cache here to avoid recomputing on every UI rebuild.
   final double walletBalance;
 
+  bool get isStandalone => societyId == null || societyId!.isEmpty;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'societyId': societyId,
@@ -45,6 +61,7 @@ class Flat {
         'ownerName': ownerName,
         'ownerPhone': ownerPhone,
         'hasApp': hasApp,
+        'addressLine': addressLine,
         'defaultQuantity': defaultQuantity,
         'pricePerLitre': pricePerLitre,
         'status': status.name,
@@ -52,48 +69,59 @@ class Flat {
         'walletBalance': walletBalance,
       };
 
-  factory Flat.fromJson(Map json) => Flat(
-        id: json['id'] as String,
-        societyId: json['societyId'] as String,
-        flatNumber: json['flatNumber'] as String,
-        ownerName: json['ownerName'] as String,
-        ownerPhone: json['ownerPhone'] as String,
-        hasApp: json['hasApp'] as bool? ?? false,
-        defaultQuantity: (json['defaultQuantity'] as num).toDouble(),
-        pricePerLitre: (json['pricePerLitre'] as num).toDouble(),
-        status: FlatStatus.values.firstWhere(
-          (s) => s.name == (json['status'] as String? ?? ''),
-          orElse: () => FlatStatus.active,
-        ),
-        billingMode: BillingMode.values.firstWhere(
-          (b) => b.name == (json['billingMode'] as String? ?? ''),
-          orElse: () => BillingMode.postpaid,
-        ),
-        walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0,
-      );
+  factory Flat.fromJson(Map json) {
+    final raw = json['societyId'];
+    final society = raw is String && raw.isNotEmpty ? raw : null;
+    return Flat(
+      id: json['id'] as String,
+      societyId: society,
+      flatNumber: json['flatNumber'] as String,
+      ownerName: json['ownerName'] as String,
+      ownerPhone: json['ownerPhone'] as String,
+      hasApp: json['hasApp'] as bool? ?? false,
+      addressLine: json['addressLine'] as String?,
+      defaultQuantity: (json['defaultQuantity'] as num).toDouble(),
+      pricePerLitre: (json['pricePerLitre'] as num).toDouble(),
+      status: FlatStatus.values.firstWhere(
+        (s) => s.name == (json['status'] as String? ?? ''),
+        orElse: () => FlatStatus.active,
+      ),
+      billingMode: BillingMode.values.firstWhere(
+        (b) => b.name == (json['billingMode'] as String? ?? ''),
+        orElse: () => BillingMode.postpaid,
+      ),
+      walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0,
+    );
+  }
 
   Flat copyWith({
     String? flatNumber,
     String? ownerName,
     String? ownerPhone,
     bool? hasApp,
+    String? addressLine,
     double? defaultQuantity,
     double? pricePerLitre,
     FlatStatus? status,
     BillingMode? billingMode,
     double? walletBalance,
+    Object? societyId = _sentinel,
   }) =>
       Flat(
         id: id,
-        societyId: societyId,
+        societyId:
+            identical(societyId, _sentinel) ? this.societyId : societyId as String?,
         flatNumber: flatNumber ?? this.flatNumber,
         ownerName: ownerName ?? this.ownerName,
         ownerPhone: ownerPhone ?? this.ownerPhone,
         hasApp: hasApp ?? this.hasApp,
+        addressLine: addressLine ?? this.addressLine,
         defaultQuantity: defaultQuantity ?? this.defaultQuantity,
         pricePerLitre: pricePerLitre ?? this.pricePerLitre,
         status: status ?? this.status,
         billingMode: billingMode ?? this.billingMode,
         walletBalance: walletBalance ?? this.walletBalance,
       );
+
+  static const _sentinel = Object();
 }

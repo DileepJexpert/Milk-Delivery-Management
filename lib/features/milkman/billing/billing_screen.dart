@@ -96,7 +96,9 @@ class _BillCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
-    final society = ref.read(societyRepositoryProvider).byId(flat.societyId);
+    final society = flat.societyId == null
+        ? null
+        : ref.read(societyRepositoryProvider).byId(flat.societyId!);
     final products = ref.watch(productsProvider).valueOrNull ?? const [];
     final productsById = {for (final p in products) p.id: p};
     return Card(

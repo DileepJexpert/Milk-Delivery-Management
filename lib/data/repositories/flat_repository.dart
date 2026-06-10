@@ -20,12 +20,16 @@ class FlatRepository {
         );
   }
 
+  /// Returns flats in any of the given societies, PLUS all standalone flats
+  /// (no society). Single-milkman app: standalone flats implicitly belong to
+  /// the only milkman.
   Stream<List<Flat>> watchAllForMilkman(Iterable<String> societyIds) async* {
     final ids = societyIds.toSet();
-    yield _all().where((f) => ids.contains(f.societyId)).toList();
-    yield* LocalStore.instance.flats.watch().map(
-          (_) => _all().where((f) => ids.contains(f.societyId)).toList(),
-        );
+    bool keep(Flat f) => f.isStandalone || ids.contains(f.societyId);
+    yield _all().where(keep).toList();
+    yield* LocalStore.instance.flats
+        .watch()
+        .map((_) => _all().where(keep).toList());
   }
 
   List<Flat> _all() => LocalStore.instance.flats.values
@@ -52,13 +56,14 @@ class FlatRepository {
   String _digits(String s) => s.replaceAll(RegExp(r'\D'), '');
 
   Future<Flat> create({
-    required String societyId,
+    String? societyId,
     required String flatNumber,
     required String ownerName,
     required String ownerPhone,
     required bool hasApp,
     required double defaultQuantity,
     required double pricePerLitre,
+    String? addressLine,
     AppUser? actor,
   }) async {
     final f = Flat(
@@ -68,6 +73,7 @@ class FlatRepository {
       ownerName: ownerName,
       ownerPhone: ownerPhone,
       hasApp: hasApp,
+      addressLine: addressLine,
       defaultQuantity: defaultQuantity,
       pricePerLitre: pricePerLitre,
     );
@@ -96,6 +102,7 @@ class FlatRepository {
     String? ownerName,
     String? ownerPhone,
     bool? hasApp,
+    String? addressLine,
     double? defaultQuantity,
     double? pricePerLitre,
   }) async {
@@ -104,6 +111,7 @@ class FlatRepository {
       ownerName: ownerName,
       ownerPhone: ownerPhone,
       hasApp: hasApp,
+      addressLine: addressLine,
       defaultQuantity: defaultQuantity,
       pricePerLitre: pricePerLitre,
     );

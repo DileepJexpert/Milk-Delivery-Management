@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/localization/app_localizations.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/upi_link.dart';
 import '../../data/models/daily_delivery.dart';
 import '../../data/models/flat.dart';
 import '../../data/models/product.dart';
 import '../../data/models/subscription.dart';
+import '../../features/milkman/settings/milkman_settings.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/repository_providers.dart';
 import '../auth/session_controller.dart';
@@ -105,57 +107,88 @@ class TodayScreen extends ConsumerWidget {
   }
 }
 
-class _WalletStrip extends StatelessWidget {
+class _WalletStrip extends ConsumerWidget {
   const _WalletStrip({required this.flat});
   final Flat flat;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
     final low = flat.walletBalance < 100;
     final scheme = Theme.of(context).colorScheme;
+    final settings = ref.watch(milkmanSettingsProvider);
+    // Suggest topping up to ₹500 if balance is low.
+    final suggestedTopup =
+        flat.walletBalance < 100 ? 500.0 - flat.walletBalance : 0.0;
+
     return Card(
       color: low
           ? scheme.errorContainer
           : Colors.green.withOpacity(0.15),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              low ? Icons.warning : Icons.account_balance_wallet,
-              color: low ? scheme.onErrorContainer : Colors.green.shade800,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(t.t('wallet_balance'),
-                      style: TextStyle(
-                        color: low ? scheme.onErrorContainer : null,
-                        fontSize: 12,
-                      )),
-                  Text(
-                    '₹${flat.walletBalance.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: low
-                          ? scheme.onErrorContainer
-                          : Colors.green.shade800,
-                    ),
+            Row(
+              children: [
+                Icon(
+                  low ? Icons.warning : Icons.account_balance_wallet,
+                  color: low ? scheme.onErrorContainer : Colors.green.shade800,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(t.t('wallet_balance'),
+                          style: TextStyle(
+                            color: low ? scheme.onErrorContainer : null,
+                            fontSize: 12,
+                          )),
+                      Text(
+                        '₹${flat.walletBalance.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: low
+                              ? scheme.onErrorContainer
+                              : Colors.green.shade800,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                if (low)
+                  Text(t.t('low_balance'),
+                      style: TextStyle(
+                        color: scheme.onErrorContainer,
+                        fontWeight: FontWeight.w600,
+                      )),
+              ],
             ),
-            if (low)
-              Text(t.t('low_balance'),
-                  style: TextStyle(
-                    color: scheme.onErrorContainer,
-                    fontWeight: FontWeight.w600,
-                  )),
+            if (low && settings.hasUpi) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => UpiLink.launch(
+                    vpa: settings.upiId!,
+                    name: settings.upiPayeeName ?? 'Milkman',
+                    amount: suggestedTopup,
+                    note: 'Wallet top-up',
+                  ),
+                  icon: const Icon(Icons.payment),
+                  label: Text(
+                    '${t.t('topup_via_upi')} · ₹${suggestedTopup.toStringAsFixed(0)}',
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

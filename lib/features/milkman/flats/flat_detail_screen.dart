@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,6 +25,17 @@ class FlatDetailScreen extends ConsumerStatefulWidget {
 
 class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
   // ── Record a one-off quantity change for a specific date ──────────────────
+  void _showPhoto(BuildContext context, String b64) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        child: InteractiveViewer(
+          child: Image.memory(base64Decode(b64)),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showRecordChangeDialog() async {
     final t = AppLocalizations.of(context);
     final flat = ref.read(flatRepositoryProvider).byId(widget.flatId);
@@ -381,7 +394,30 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
                       color: r.status == DeliveryStatus.delivered ? Colors.green : Colors.orange,
                     ),
                     title: Text(r.dateKey),
-                    trailing: Text('${r.actualQuantity}L'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (r.proofPhotoB64 != null &&
+                            r.proofPhotoB64!.isNotEmpty)
+                          GestureDetector(
+                            onTap: () => _showPhoto(context, r.proofPhotoB64!),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(4),
+                                image: DecorationImage(
+                                  image: MemoryImage(
+                                      base64Decode(r.proofPhotoB64!)),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Text('${r.actualQuantity}L'),
+                      ],
+                    ),
                     subtitle: Text(r.status.name),
                   ),
               ],

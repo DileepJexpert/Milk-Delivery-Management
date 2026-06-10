@@ -35,8 +35,8 @@ class WalletScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _topup(context, ref),
-        icon: const Icon(Icons.add_card),
-        label: Text(t.t('wallet_topup')),
+        icon: const Icon(Icons.payments),
+        label: Text(t.t('collect_payment')),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
@@ -98,37 +98,72 @@ class WalletScreen extends ConsumerWidget {
   Future<void> _topup(BuildContext context, WidgetRef ref) async {
     final t = AppLocalizations.of(context);
     final amountCtrl = TextEditingController();
-    final reasonCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    String method = 'cash';
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t.t('wallet_topup')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountCtrl,
-              autofocus: true,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: t.t('topup_amount')),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => AlertDialog(
+          title: Text(t.t('collect_payment')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: amountCtrl,
+                  autofocus: true,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: t.t('amount'),
+                    prefixText: '₹ ',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(t.t('payment_method'),
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 4),
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment(
+                      value: 'cash',
+                      label: Text(t.t('cash')),
+                      icon: const Icon(Icons.payments),
+                    ),
+                    ButtonSegment(
+                      value: 'upi',
+                      label: Text(t.t('upi')),
+                      icon: const Icon(Icons.qr_code),
+                    ),
+                    ButtonSegment(
+                      value: 'bank',
+                      label: Text(t.t('bank')),
+                      icon: const Icon(Icons.account_balance),
+                    ),
+                  ],
+                  selected: {method},
+                  onSelectionChanged: (s) =>
+                      setInner(() => method = s.first),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: InputDecoration(labelText: t.t('note_optional')),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: reasonCtrl,
-              decoration: InputDecoration(labelText: t.t('reason_optional')),
-            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(t.t('cancel'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(t.t('save'))),
           ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(t.t('cancel'))),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(t.t('save'))),
-        ],
       ),
     );
     if (ok != true) return;
@@ -137,17 +172,15 @@ class WalletScreen extends ConsumerWidget {
     final actor = ref.read(sessionControllerProvider).user!;
     final flat = ref.read(flatRepositoryProvider).byId(flatId);
     if (flat == null) return;
-    await ref.read(walletRepositoryProvider).topup(
-          flat,
-          actor,
-          amount,
-          reason: reasonCtrl.text.trim().isEmpty
-              ? null
-              : reasonCtrl.text.trim(),
-        );
+    final note = noteCtrl.text.trim();
+    final reason =
+        note.isEmpty ? '$method payment' : '$method · $note';
+    await ref
+        .read(walletRepositoryProvider)
+        .topup(flat, actor, amount, reason: reason);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(t.t('topup_added'))),
+        SnackBar(content: Text(t.t('payment_recorded'))),
       );
     }
   }

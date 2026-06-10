@@ -49,7 +49,15 @@
   <array>
     <string>whatsapp</string>
     <string>https</string>
+    <string>upi</string>
+    <string>gpay</string>
+    <string>phonepe</string>
+    <string>paytm</string>
   </array>
+  <key>NSCameraUsageDescription</key>
+  <string>Used to capture delivery proof photos (bottle at door etc.).</string>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Used to attach delivery proof photos from your gallery.</string>
   <key>CFBundleLocalizations</key>
   <array>
     <string>en</string>

@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Camera + storage for delivery photo proof. CAMERA is the only one
+         actually requested at runtime; the storage entries are required so
+         image_picker can read its temp file on older Android versions. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <queries>
         <!-- WhatsApp deep links via url_launcher -->
@@ -11,6 +17,11 @@
         </intent>
         <package android:name="com.whatsapp"/>
         <package android:name="com.whatsapp.w4b"/>
+        <!-- UPI app picker (GPay, PhonePe, Paytm, BHIM) for "Pay" button -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="upi"/>
+        </intent>
     </queries>
 
     <application

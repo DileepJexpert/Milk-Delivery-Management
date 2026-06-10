@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/proof_photo.dart';
 import '../../../core/utils/whatsapp.dart';
 import '../../../data/models/daily_delivery.dart';
 import '../../../data/models/flat.dart';
@@ -16,11 +17,34 @@ import '../../auth/session_controller.dart';
 import '../absences/broadcast_absence_screen.dart';
 import '../absences/manage_absences_screen.dart';
 
-class TodaysRouteScreen extends ConsumerWidget {
+class TodaysRouteScreen extends ConsumerStatefulWidget {
   const TodaysRouteScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TodaysRouteScreen> createState() => _TodaysRouteScreenState();
+}
+
+class _TodaysRouteScreenState extends ConsumerState<TodaysRouteScreen> {
+  String _query = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matches(Flat f) {
+    if (_query.isEmpty) return true;
+    final q = _query.toLowerCase();
+    return f.flatNumber.toLowerCase().contains(q) ||
+        f.ownerName.toLowerCase().contains(q) ||
+        f.ownerPhone.contains(q) ||
+        (f.addressLine?.toLowerCase().contains(q) ?? false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
     final flatsAsync = ref.watch(flatsForCurrentMilkmanProvider);
     final societiesAsync = ref.watch(societiesForCurrentMilkmanProvider);
@@ -42,8 +66,10 @@ class TodaysRouteScreen extends ConsumerWidget {
       return Center(child: Text(t.t('no_flats')));
     }
 
-    final activeFlats =
-        flats.where((f) => f.status != FlatStatus.stopped).toList();
+    final activeFlats = flats
+        .where((f) => f.status != FlatStatus.stopped)
+        .where(_matches)
+        .toList();
     final productsById = {for (final p in products) p.id: p};
 
     // Group all delivery rows by flat id, then sort each list by product name.
@@ -68,6 +94,38 @@ class TodaysRouteScreen extends ConsumerWidget {
       children: [
         if (isOffToday) const _OffTodayBanner() else const _OffTodayCta(),
         const SizedBox(height: 12),
+        // Search bar
+        TextField(
+          controller: _searchCtrl,
+          decoration: InputDecoration(
+            hintText: t.t('search_hint'),
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+          onChanged: (v) => setState(() => _query = v.trim()),
+        ),
+        const SizedBox(height: 12),
+        if (_query.isNotEmpty && activeFlats.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              t.t('no_search_results'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+          ),
         for (final society in societies)
           _SocietyBlock(
             society: society,
@@ -221,6 +279,17 @@ class _FlatBlock extends ConsumerWidget {
                     ),
                   ),
                 ),
+              IconButton(
+                tooltip: AppLocalizations.of(context).t('collect_payment'),
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                    minWidth: 32, minHeight: 32),
+                onPressed: () => _collectCash(context, ref, flat),
+                icon: Icon(Icons.payments_outlined,
+                    color: Colors.green.shade700),
+              ),
             ],
           ),
           if (rows.isEmpty)
@@ -242,6 +311,71 @@ class _FlatBlock extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _collectCash(
+      BuildContext context, WidgetRef ref, Flat flat) async {
+    final t = AppLocalizations.of(context);
+    final amountCtrl = TextEditingController();
+    String method = 'cash';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => AlertDialog(
+          title: Text('${t.t('collect_payment')} · ${flat.ownerName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: amountCtrl,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: t.t('amount'),
+                  prefixText: '₹ ',
+                ),
+              ),
+              const SizedBox(height: 16),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'cash', label: Text(t.t('cash'))),
+                  ButtonSegment(value: 'upi', label: Text(t.t('upi'))),
+                  ButtonSegment(value: 'bank', label: Text(t.t('bank'))),
+                ],
+                selected: {method},
+                onSelectionChanged: (s) => setInner(() => method = s.first),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(t.t('cancel'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(t.t('save'))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final amount = double.tryParse(amountCtrl.text);
+    if (amount == null || amount <= 0) return;
+    final actor = ref.read(sessionControllerProvider).user;
+    if (actor == null) return;
+    await ref.read(walletRepositoryProvider).topup(
+          flat,
+          actor,
+          amount,
+          reason: '$method payment',
+        );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('payment_recorded'))),
+      );
+    }
   }
 }
 
@@ -332,6 +466,20 @@ class _ProductRow extends ConsumerWidget {
                   style: const TextStyle(fontSize: 12)),
             ),
             const SizedBox(width: 4),
+            IconButton(
+              tooltip: t.t('deliver_with_photo'),
+              iconSize: 20,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _deliverWithPhoto(context, ref),
+              icon: Icon(
+                row.proofPhotoB64 != null && row.proofPhotoB64!.isNotEmpty
+                    ? Icons.photo_camera
+                    : Icons.photo_camera_outlined,
+                color: row.proofPhotoB64 != null && row.proofPhotoB64!.isNotEmpty
+                    ? Colors.blue
+                    : null,
+              ),
+            ),
             IconButton.filledTonal(
               tooltip: t.t('mark_skipped'),
               iconSize: 20,
@@ -357,6 +505,23 @@ class _ProductRow extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _deliverWithPhoto(
+      BuildContext context, WidgetRef ref) async {
+    final t = AppLocalizations.of(context);
+    final actor = ref.read(sessionControllerProvider).user;
+    if (actor == null) return;
+    final b64 = await ProofPhoto.capture();
+    if (b64 == null) return;
+    await ref
+        .read(deliveryRepositoryProvider)
+        .markDelivered(row, actor, proofPhotoB64: b64);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('photo_proof_saved'))),
+      );
+    }
   }
 
   Future<void> _changeQty(BuildContext context, WidgetRef ref) async {

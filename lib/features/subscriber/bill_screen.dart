@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/localization/app_localizations.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/upi_link.dart';
 import '../../data/models/flat.dart';
+import '../../features/milkman/settings/milkman_settings.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/repository_providers.dart';
 
@@ -73,6 +75,12 @@ class _BillScreenState extends ConsumerState<BillScreen> {
                       '${t.t('days_subscriber_paused')}: ${summary.daysSubscriberPaused}'),
                   Text(
                       '${t.t('days_milkman_absent')}: ${summary.daysMilkmanAbsent}'),
+                  const SizedBox(height: 12),
+                  _PayViaUpiButton(
+                    amount: summary.totalAmount,
+                    note:
+                        'Milk bill ${_month.year}-${_month.month.toString().padLeft(2, '0')}',
+                  ),
                 ],
               ),
             ),
@@ -124,6 +132,87 @@ class _BillScreenState extends ConsumerState<BillScreen> {
         ],
       ),
     );
+  }
+}
+
+class _PayViaUpiButton extends ConsumerWidget {
+  const _PayViaUpiButton({required this.amount, required this.note});
+  final double amount;
+  final String note;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final settings = ref.watch(milkmanSettingsProvider);
+    if (amount <= 0) return const SizedBox.shrink();
+    if (!settings.hasUpi) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          t.t('upi_not_configured'),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.outline,
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: () => _pay(context, settings),
+        icon: const Icon(Icons.payment),
+        label: Text('${t.t('pay_via_upi')} · ₹${amount.toStringAsFixed(2)}'),
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.green.shade700,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pay(BuildContext context, MilkmanSettings settings) async {
+    final t = AppLocalizations.of(context);
+    final ok = await UpiLink.launch(
+      vpa: settings.upiId!,
+      name: settings.upiPayeeName ?? 'Milkman',
+      amount: amount,
+      note: note,
+    );
+    if (!ok && context.mounted) {
+      // No UPI app — show the ID so customer can copy it.
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(t.t('pay_via_upi')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(t.t('pay_to_upi_id')),
+              const SizedBox(height: 8),
+              SelectableText(
+                settings.upiId!,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${t.t('amount')}: ₹${amount.toStringAsFixed(2)}',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(t.t('cancel')),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
 

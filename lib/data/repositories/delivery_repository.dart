@@ -119,12 +119,14 @@ class DeliveryRepository {
     AppUser actor, {
     double? quantity,
     String? reason,
+    String? proofPhotoB64,
   }) async {
     final qty = quantity ?? row.plannedQuantity;
     final updated = row.copyWith(
       status: DeliveryStatus.delivered,
       actualQuantity: qty,
       deliveredAt: DateTime.now(),
+      proofPhotoB64: proofPhotoB64,
     );
     await _persist(updated);
     await _audit.log(

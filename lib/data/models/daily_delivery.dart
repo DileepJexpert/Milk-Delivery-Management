@@ -13,6 +13,7 @@ class DailyDelivery {
     required this.unitPrice,
     required this.status,
     this.deliveredAt,
+    this.proofPhotoB64,
   });
 
   final String id;
@@ -33,6 +34,11 @@ class DailyDelivery {
   final DeliveryStatus status;
   final DateTime? deliveredAt;
 
+  /// Base64-encoded JPEG of the delivery proof photo (bottle at door etc.).
+  /// Optional. Captured at mark-delivered time. We store inline rather than as
+  /// a file path so it survives across web origins and lazily syncs to remote.
+  final String? proofPhotoB64;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'flatId': flatId,
@@ -43,6 +49,7 @@ class DailyDelivery {
         'unitPrice': unitPrice,
         'status': status.name,
         'deliveredAt': deliveredAt?.toIso8601String(),
+        'proofPhotoB64': proofPhotoB64,
       };
 
   factory DailyDelivery.fromJson(Map json) => DailyDelivery(
@@ -60,6 +67,7 @@ class DailyDelivery {
         deliveredAt: json['deliveredAt'] == null
             ? null
             : DateTime.parse(json['deliveredAt'] as String),
+        proofPhotoB64: json['proofPhotoB64'] as String?,
       );
 
   DailyDelivery copyWith({
@@ -69,6 +77,7 @@ class DailyDelivery {
     double? unitPrice,
     DeliveryStatus? status,
     DateTime? deliveredAt,
+    String? proofPhotoB64,
   }) =>
       DailyDelivery(
         id: id,
@@ -80,5 +89,6 @@ class DailyDelivery {
         unitPrice: unitPrice ?? this.unitPrice,
         status: status ?? this.status,
         deliveredAt: deliveredAt ?? this.deliveredAt,
+        proofPhotoB64: proofPhotoB64 ?? this.proofPhotoB64,
       );
 }

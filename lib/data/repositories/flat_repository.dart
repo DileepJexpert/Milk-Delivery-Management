@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../local/local_store.dart';
 import '../local/sync_queue.dart';
 import '../models/audit_log.dart';
-import '../models/flat.dart';
+import '../models/flat.dart' show Flat, FlatStatus, BillingMode;
 import '../models/user.dart';
 import 'audit_repository.dart';
 
@@ -20,12 +20,16 @@ class FlatRepository {
         );
   }
 
+  /// Returns flats in any of the given societies, PLUS all standalone flats
+  /// (no society). Single-milkman app: standalone flats implicitly belong to
+  /// the only milkman.
   Stream<List<Flat>> watchAllForMilkman(Iterable<String> societyIds) async* {
     final ids = societyIds.toSet();
-    yield _all().where((f) => ids.contains(f.societyId)).toList();
-    yield* LocalStore.instance.flats.watch().map(
-          (_) => _all().where((f) => ids.contains(f.societyId)).toList(),
-        );
+    bool keep(Flat f) => f.isStandalone || ids.contains(f.societyId);
+    yield _all().where(keep).toList();
+    yield* LocalStore.instance.flats
+        .watch()
+        .map((_) => _all().where(keep).toList());
   }
 
   List<Flat> _all() => LocalStore.instance.flats.values
@@ -52,13 +56,14 @@ class FlatRepository {
   String _digits(String s) => s.replaceAll(RegExp(r'\D'), '');
 
   Future<Flat> create({
-    required String societyId,
+    String? societyId,
     required String flatNumber,
     required String ownerName,
     required String ownerPhone,
     required bool hasApp,
     required double defaultQuantity,
     required double pricePerLitre,
+    String? addressLine,
     AppUser? actor,
   }) async {
     final f = Flat(
@@ -68,6 +73,7 @@ class FlatRepository {
       ownerName: ownerName,
       ownerPhone: ownerPhone,
       hasApp: hasApp,
+      addressLine: addressLine,
       defaultQuantity: defaultQuantity,
       pricePerLitre: pricePerLitre,
     );
@@ -96,6 +102,7 @@ class FlatRepository {
     String? ownerName,
     String? ownerPhone,
     bool? hasApp,
+    String? addressLine,
     double? defaultQuantity,
     double? pricePerLitre,
   }) async {
@@ -104,6 +111,7 @@ class FlatRepository {
       ownerName: ownerName,
       ownerPhone: ownerPhone,
       hasApp: hasApp,
+      addressLine: addressLine,
       defaultQuantity: defaultQuantity,
       pricePerLitre: pricePerLitre,
     );
@@ -144,6 +152,82 @@ class FlatRepository {
       oldValue: flat.status.name,
       newValue: FlatStatus.active.name,
       reason: reason,
+    );
+    return updated;
+  }
+
+  Future<Flat> startVacation(
+    Flat flat,
+    AppUser actor,
+    DateTime from,
+    DateTime to,
+  ) async {
+    String key(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final updated = flat.copyWith(
+      vacationFromKey: key(from),
+      vacationToKey: key(to),
+    );
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.vacationStarted,
+      oldValue: flat.vacationFromKey == null ? '-' : 'previous vacation',
+      newValue: '${key(from)} → ${key(to)}',
+    );
+    return updated;
+  }
+
+  Future<Flat> endVacation(Flat flat, AppUser actor) async {
+    if (flat.vacationFromKey == null) return flat;
+    final updated = flat.copyWith(
+      vacationFromKey: null,
+      vacationToKey: null,
+    );
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.vacationEnded,
+      oldValue: '${flat.vacationFromKey} → ${flat.vacationToKey}',
+      newValue: 'cancelled',
+    );
+    return updated;
+  }
+
+  Future<Flat> setPauseOnFestivals(
+    Flat flat,
+    AppUser actor,
+    bool enabled,
+  ) async {
+    if (flat.pauseOnFestivals == enabled) return flat;
+    final updated = flat.copyWith(pauseOnFestivals: enabled);
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.festivalAutoPauseChanged,
+      oldValue: flat.pauseOnFestivals.toString(),
+      newValue: enabled.toString(),
+    );
+    return updated;
+  }
+
+  Future<Flat> setBillingMode(
+    Flat flat,
+    AppUser actor,
+    BillingMode mode,
+  ) async {
+    if (flat.billingMode == mode) return flat;
+    final updated = flat.copyWith(billingMode: mode);
+    await _persist(updated);
+    await _audit.log(
+      flatId: flat.id,
+      actor: actor,
+      type: AuditChangeType.billingModeChanged,
+      oldValue: flat.billingMode.name,
+      newValue: mode.name,
     );
     return updated;
   }

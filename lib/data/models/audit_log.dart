@@ -12,6 +12,23 @@ enum AuditChangeType {
   changeRequestApplied,
   milkmanAbsenceAdded,
   milkmanAbsenceRemoved,
+  productAdded,
+  productUpdated,
+  productDeleted,
+  categoryAdded,
+  categoryUpdated,
+  subscriptionAdded,
+  subscriptionUpdated,
+  subscriptionStopped,
+  subscriptionResumed,
+  billingModeChanged,
+  walletTopup,
+  walletDebit,
+  walletRefund,
+  vacationStarted,
+  vacationEnded,
+  oneTimeOrder,
+  festivalAutoPauseChanged,
 }
 
 class AuditLog {

@@ -8,6 +8,7 @@ import '../../../core/utils/whatsapp.dart';
 import '../../../core/utils/whatsapp_templates.dart';
 import '../../../data/local/local_store.dart';
 import '../../../data/models/flat.dart';
+import '../../../data/models/product.dart';
 import '../../../data/repositories/delivery_repository.dart';
 import '../../../providers/data_providers.dart';
 import '../../../providers/repository_providers.dart';
@@ -98,31 +99,89 @@ class _BillCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
-    final society = ref.read(societyRepositoryProvider).byId(flat.societyId);
+    final society = flat.societyId == null
+        ? null
+        : ref.read(societyRepositoryProvider).byId(flat.societyId!);
+    final products = ref.watch(productsProvider).valueOrNull ?? const [];
+    final productsById = {for (final p in products) p.id: p};
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Flat ${flat.flatNumber} · ${flat.ownerName}',
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            Text(society?.name ?? '',
-                style: Theme.of(context).textTheme.bodySmall),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Flat ${flat.flatNumber} · ${flat.ownerName}',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(society?.name ?? '',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: flat.billingMode == BillingMode.prepaid
+                        ? Colors.blue.withValues(alpha: 0.12)
+                        : Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    flat.billingMode == BillingMode.prepaid
+                        ? t.t('billing_prepaid')
+                        : t.t('billing_postpaid'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: flat.billingMode == BillingMode.prepaid
+                          ? Colors.blue.shade800
+                          : Colors.amber.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const Divider(height: 16),
-            _kv('${t.t('days_delivered_label')} (billable): ',
-                '${summary.daysDelivered} · ${summary.totalLitres}L'),
+            // Per-product breakdown
+            if (summary.products.isNotEmpty) ...[
+              Text(t.t('per_product_breakdown'),
+                  style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 4),
+              for (final line in summary.products)
+                _ProductLineRow(
+                  line: line,
+                  product: productsById[line.productId],
+                ),
+              const Divider(height: 16),
+            ],
+            _kv('${t.t('days_delivered_label')}: ',
+                '${summary.daysDelivered}'),
             _kv('${t.t('days_subscriber_paused')}: ',
                 '${summary.daysSubscriberPaused}'),
             _kv('${t.t('days_milkman_absent')}: ',
                 '${summary.daysMilkmanAbsent}'),
-            _kv('${t.t('days_custom')}: ', '${summary.daysCustom}'),
             const SizedBox(height: 8),
             Text(
-              '${t.t('total_amount')}: ₹${summary.amountDue.toStringAsFixed(2)}',
+              '${t.t('total_amount')}: ₹${summary.totalAmount.toStringAsFixed(2)}',
               style: const TextStyle(
                   fontSize: 18, fontWeight: FontWeight.bold),
             ),
+            if (flat.billingMode == BillingMode.prepaid) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${t.t('wallet_balance')}: ₹${flat.walletBalance.toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: flat.walletBalance < 0 ? Colors.red : null,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -140,13 +199,16 @@ class _BillCard extends ConsumerWidget {
                 ),
                 OutlinedButton.icon(
                   onPressed: () {
-                    final monthLabel = AppDates.monthLabel(month, locale: Localizations.localeOf(context).languageCode);
-                    final upiVpa = LocalStore.instance.settings.get('custom_upi_vpa') as String? ?? UpiPayment.defaultVpa;
+                    final monthLabel = AppDates.monthLabel(month,
+                        locale: Localizations.localeOf(context).languageCode);
+                    final upiVpa = LocalStore.instance.settings
+                            .get('custom_upi_vpa') as String? ??
+                        UpiPayment.defaultVpa;
                     final msg = WhatsAppTemplates.monthlyBillNotice(
                       ownerName: flat.ownerName,
                       flatNumber: flat.flatNumber,
                       month: monthLabel,
-                      amount: summary.amountDue,
+                      amount: summary.totalAmount,
                       daysDelivered: summary.daysDelivered,
                       totalLitres: summary.totalLitres,
                       upiVpa: upiVpa,
@@ -168,4 +230,28 @@ class _BillCard extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(children: [Text(k), Text(v)]),
       );
+}
+
+class _ProductLineRow extends StatelessWidget {
+  const _ProductLineRow({required this.line, required this.product});
+  final ProductLine line;
+  final Product? product;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = product?.name ?? '—';
+    final unit = product?.unit.short ?? '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('$name · ${line.quantity.toStringAsFixed(2)} $unit'),
+          ),
+          Text('₹${line.subtotal.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
 }

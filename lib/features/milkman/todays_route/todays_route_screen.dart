@@ -4,57 +4,147 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/proof_photo.dart';
 import '../../../core/utils/whatsapp.dart';
 import '../../../core/utils/whatsapp_templates.dart';
 import '../../../data/models/daily_delivery.dart';
 import '../../../data/models/flat.dart';
 import '../../../data/models/milkman_absence.dart';
+import '../../../data/models/product.dart';
 import '../../../data/models/society.dart';
 import '../../../providers/data_providers.dart';
 import '../../../providers/repository_providers.dart';
 import '../../auth/session_controller.dart';
 import '../absences/broadcast_absence_screen.dart';
 import '../absences/manage_absences_screen.dart';
+import '../dashboard/daily_revenue_screen.dart';
+import '../dashboard/inventory_screen.dart';
+import '../quick/quick_command_dialog.dart';
 
-class TodaysRouteScreen extends ConsumerWidget {
+class TodaysRouteScreen extends ConsumerStatefulWidget {
   const TodaysRouteScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TodaysRouteScreen> createState() => _TodaysRouteScreenState();
+}
+
+class _TodaysRouteScreenState extends ConsumerState<TodaysRouteScreen> {
+  String _query = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matches(Flat f) {
+    if (_query.isEmpty) return true;
+    final q = _query.toLowerCase();
+    return f.flatNumber.toLowerCase().contains(q) ||
+        f.ownerName.toLowerCase().contains(q) ||
+        f.ownerPhone.contains(q) ||
+        (f.addressLine?.toLowerCase().contains(q) ?? false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
     final flatsAsync = ref.watch(flatsForCurrentMilkmanProvider);
     final societiesAsync = ref.watch(societiesForCurrentMilkmanProvider);
     final routeAsync = ref.watch(todaysRouteProvider);
+    final productsAsync = ref.watch(productsProvider);
 
     if (flatsAsync.isLoading ||
         societiesAsync.isLoading ||
-        routeAsync.isLoading) {
+        routeAsync.isLoading ||
+        productsAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
     final flats = flatsAsync.value ?? [];
     final societies = societiesAsync.value ?? [];
     final rows = routeAsync.value ?? [];
+    final products = productsAsync.value ?? [];
     if (flats.isEmpty) {
       return Center(child: Text(t.t('no_flats')));
     }
 
+    final activeFlats = flats
+        .where((f) => f.status != FlatStatus.stopped)
+        .where(_matches)
+        .toList();
+    final productsById = {for (final p in products) p.id: p};
 
-    final rowsByFlat = {for (final r in rows) r.flatId: r};
-    final activeFlats = flats.where((f) => f.status != FlatStatus.stopped).toList();
+    // Group all delivery rows by flat id, then sort each list by product name.
+    final rowsByFlat = <String, List<DailyDelivery>>{};
+    for (final r in rows) {
+      rowsByFlat.putIfAbsent(r.flatId, () => []).add(r);
+    }
+    for (final list in rowsByFlat.values) {
+      list.sort((a, b) {
+        final an = productsById[a.productId]?.name ?? '';
+        final bn = productsById[b.productId]?.name ?? '';
+        return an.compareTo(bn);
+      });
+    }
+
     final grouped = groupBy(activeFlats, (f) => f.societyId);
+    final standaloneFlats = activeFlats.where((f) => f.isStandalone).toList();
     final isOffToday = ref.watch(isMilkmanAbsentTodayProvider);
 
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
         if (isOffToday) const _OffTodayBanner() else const _OffTodayCta(),
+        const SizedBox(height: 8),
+        _SummaryStrip(onQuickCommand: () => showQuickCommand(context, ref)),
         const SizedBox(height: 12),
+        // Search bar
+        TextField(
+          controller: _searchCtrl,
+          decoration: InputDecoration(
+            hintText: t.t('search_hint'),
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+          onChanged: (v) => setState(() => _query = v.trim()),
+        ),
+        const SizedBox(height: 12),
+        if (_query.isNotEmpty && activeFlats.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              t.t('no_search_results'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+          ),
         for (final society in societies)
           _SocietyBlock(
             society: society,
             flats: grouped[society.id] ?? const [],
             rowsByFlat: rowsByFlat,
+            productsById: productsById,
+          ),
+        if (standaloneFlats.isNotEmpty)
+          _SocietyBlock(
+            society: null,
+            flats: standaloneFlats,
+            rowsByFlat: rowsByFlat,
+            productsById: productsById,
           ),
       ],
     );
@@ -66,31 +156,47 @@ class _SocietyBlock extends ConsumerWidget {
     required this.society,
     required this.flats,
     required this.rowsByFlat,
+    required this.productsById,
   });
 
-  final Society society;
+  final Society? society;
   final List<Flat> flats;
-  final Map<String, DailyDelivery> rowsByFlat;
+  final Map<String, List<DailyDelivery>> rowsByFlat;
+  final Map<String, Product> productsById;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (flats.isEmpty) return const SizedBox.shrink();
+    final t = AppLocalizations.of(context);
+    final label = society?.name ?? t.t('standalone_customers');
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              society.name,
-              style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Icon(
+                  society == null
+                      ? Icons.home_outlined
+                      : Icons.apartment_outlined,
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
             ),
             const Divider(height: 16),
             for (final f in flats)
-              _DeliveryRow(
+              _FlatBlock(
                 flat: f,
-                row: rowsByFlat[f.id],
+                rows: rowsByFlat[f.id] ?? const [],
+                productsById: productsById,
               ),
           ],
         ),
@@ -99,11 +205,196 @@ class _SocietyBlock extends ConsumerWidget {
   }
 }
 
-class _DeliveryRow extends ConsumerWidget {
-  const _DeliveryRow({required this.flat, required this.row});
+class _FlatBlock extends ConsumerWidget {
+  const _FlatBlock({
+    required this.flat,
+    required this.rows,
+    required this.productsById,
+  });
 
   final Flat flat;
-  final DailyDelivery? row;
+  final List<DailyDelivery> rows;
+  final Map<String, Product> productsById;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final isPrepaid = flat.billingMode == BillingMode.prepaid;
+    final balanceLow = isPrepaid && flat.walletBalance < 100;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Flat header
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: scheme.primaryContainer,
+                child: Text(
+                  flat.flatNumber.substring(0, 1),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onPrimaryContainer,
+                      fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      flat.isStandalone
+                          ? '${flat.flatNumber} · ${flat.ownerName}'
+                          : 'Flat ${flat.flatNumber} · ${flat.ownerName}',
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    if (flat.addressLine != null &&
+                        flat.addressLine!.isNotEmpty)
+                      Text(
+                        flat.addressLine!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (isPrepaid)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: balanceLow
+                        ? Colors.red.withOpacity(0.15)
+                        : Colors.green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '₹${flat.walletBalance.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: balanceLow ? Colors.red : Colors.green.shade800,
+                    ),
+                  ),
+                ),
+              IconButton(
+                tooltip: AppLocalizations.of(context).t('collect_payment'),
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                    minWidth: 32, minHeight: 32),
+                onPressed: () => _collectCash(context, ref, flat),
+                icon: Icon(Icons.payments_outlined,
+                    color: Colors.green.shade700),
+              ),
+            ],
+          ),
+          if (rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(36, 4, 0, 4),
+              child: Text(
+                t.t('no_subscriptions_short'),
+                style: TextStyle(color: scheme.outline, fontSize: 12),
+              ),
+            )
+          else
+            for (final row in rows)
+              _ProductRow(
+                flat: flat,
+                row: row,
+                product: productsById[row.productId],
+              ),
+          const Divider(height: 16, indent: 36),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _collectCash(
+      BuildContext context, WidgetRef ref, Flat flat) async {
+    final t = AppLocalizations.of(context);
+    final amountCtrl = TextEditingController();
+    String method = 'cash';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => AlertDialog(
+          title: Text('${t.t('collect_payment')} · ${flat.ownerName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: amountCtrl,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: t.t('amount'),
+                  prefixText: '₹ ',
+                ),
+              ),
+              const SizedBox(height: 16),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'cash', label: Text(t.t('cash'))),
+                  ButtonSegment(value: 'upi', label: Text(t.t('upi'))),
+                  ButtonSegment(value: 'bank', label: Text(t.t('bank'))),
+                ],
+                selected: {method},
+                onSelectionChanged: (s) => setInner(() => method = s.first),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(t.t('cancel'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(t.t('save'))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final amount = double.tryParse(amountCtrl.text);
+    if (amount == null || amount <= 0) return;
+    final actor = ref.read(sessionControllerProvider).user;
+    if (actor == null) return;
+    await ref.read(walletRepositoryProvider).topup(
+          flat,
+          actor,
+          amount,
+          reason: '$method payment',
+        );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('payment_recorded'))),
+      );
+    }
+  }
+}
+
+class _ProductRow extends ConsumerWidget {
+  const _ProductRow({
+    required this.flat,
+    required this.row,
+    required this.product,
+  });
+
+  final Flat flat;
+  final DailyDelivery row;
+  final Product? product;
 
   Color _statusColor(BuildContext context, DeliveryStatus s) {
     final scheme = Theme.of(context).colorScheme;
@@ -127,35 +418,63 @@ class _DeliveryRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
-    final status = row?.status ?? DeliveryStatus.pending;
-    final qty = row?.actualQuantity ?? 0;
-    final planned = row?.plannedQuantity ?? flat.defaultQuantity;
+    final status = row.status;
+    final qty = row.actualQuantity;
+    final planned = row.plannedQuantity;
+    final unit = product?.unit.short ?? '';
+    final name = product?.name ?? '—';
     final repo = ref.read(deliveryRepositoryProvider);
 
     return InkWell(
       onLongPress: () => _changeQty(context, ref),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.fromLTRB(28, 6, 0, 6),
         child: Row(
           children: [
-            Icon(_statusIcon(status), color: _statusColor(context, status), size: 32),
-            const SizedBox(width: 12),
+            Icon(_statusIcon(status),
+                color: _statusColor(context, status), size: 26),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Flat ${flat.flatNumber} · ${flat.ownerName}',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (row.isOneTime)
+                        Container(
+                          margin: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            '1×',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   Text(
                     status == DeliveryStatus.delivered
-                        ? '${t.t('delivered')} · ${qty}L'
-                        : '${t.t('qty_label')}: ${planned}L',
-                    style: TextStyle(color: _statusColor(context, status)),
+                        ? '${t.t('delivered')} · $qty $unit'
+                        : '${t.t('qty_label')}: $planned $unit  ·  ₹${row.unitPrice.toStringAsFixed(0)}/$unit',
+                    style: TextStyle(
+                        color: _statusColor(context, status), fontSize: 12),
                   ),
-                  if (row?.notes != null && row!.notes!.isNotEmpty) ...[
+                  if (row.notes != null && row.notes!.isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -164,7 +483,7 @@ class _DeliveryRow extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        '🏷️ ${row!.notes!}',
+                        '🏷️ ${row.notes!}',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -176,52 +495,64 @@ class _DeliveryRow extends ConsumerWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            // Big tap target: one-tap "Delivered" (default qty).
+            const SizedBox(width: 6),
             FilledButton.tonalIcon(
               style: FilledButton.styleFrom(
-                minimumSize: const Size(110, 48),
+                minimumSize: const Size(90, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 backgroundColor: status == DeliveryStatus.delivered
                     ? Colors.green.withValues(alpha: 0.2)
                     : null,
               ),
-              onPressed: row == null
-                  ? null
-                  : () {
-                      final actor =
-                          ref.read(sessionControllerProvider).user;
-                      if (actor == null) return;
-                      repo.markDelivered(row!, actor);
-                    },
-              icon: const Icon(Icons.check),
-              label: Text(t.t('mark_delivered')),
-            ),
-            const SizedBox(width: 6),
-            IconButton.filledTonal(
-              tooltip: t.t('mark_skipped'),
-              onPressed: row == null
-                  ? null
-                  : () {
-                      final actor =
-                          ref.read(sessionControllerProvider).user;
-                      if (actor == null) return;
-                      repo.markSkipped(row!, actor);
-                    },
-              icon: const Icon(Icons.cancel_outlined),
+              onPressed: () {
+                final actor = ref.read(sessionControllerProvider).user;
+                if (actor == null) return;
+                repo.markDelivered(row, actor);
+              },
+              icon: const Icon(Icons.check, size: 16),
+              label: Text(t.t('mark_delivered'),
+                  style: const TextStyle(fontSize: 12)),
             ),
             const SizedBox(width: 4),
             IconButton(
+              tooltip: t.t('deliver_with_photo'),
+              iconSize: 20,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _deliverWithPhoto(context, ref),
+              icon: Icon(
+                row.proofPhotoB64 != null && row.proofPhotoB64!.isNotEmpty
+                    ? Icons.photo_camera
+                    : Icons.photo_camera_outlined,
+                color: row.proofPhotoB64 != null && row.proofPhotoB64!.isNotEmpty
+                    ? Colors.blue
+                    : null,
+              ),
+            ),
+            IconButton.filledTonal(
+              tooltip: t.t('mark_skipped'),
+              iconSize: 20,
+              onPressed: () {
+                final actor = ref.read(sessionControllerProvider).user;
+                if (actor == null) return;
+                repo.markSkipped(row, actor);
+              },
+              icon: const Icon(Icons.cancel_outlined),
+            ),
+            IconButton(
               tooltip: t.t('whatsapp_notify'),
+              iconSize: 20,
               color: Colors.green.shade700,
               icon: const Icon(Icons.send_outlined),
               onPressed: () {
-                final time = TimeOfDay.fromDateTime(row?.deliveredAt ?? DateTime.now()).format(context);
+                final time = TimeOfDay.fromDateTime(
+                        row.deliveredAt ?? DateTime.now())
+                    .format(context);
                 final msg = WhatsAppTemplates.morningDeliveryAlert(
                   ownerName: flat.ownerName,
                   flatNumber: flat.flatNumber,
                   quantity: qty > 0 ? qty : planned,
                   time: time,
-                  notes: row?.notes,
+                  notes: row.notes,
                 );
                 WhatsAppLink.send(flat.ownerPhone, msg);
               },
@@ -232,10 +563,26 @@ class _DeliveryRow extends ConsumerWidget {
     );
   }
 
-  Future<void> _changeQty(BuildContext context, WidgetRef ref) async {
-    if (row == null) return;
+  Future<void> _deliverWithPhoto(
+      BuildContext context, WidgetRef ref) async {
     final t = AppLocalizations.of(context);
-    final qtyC = TextEditingController(text: row!.plannedQuantity.toString());
+    final actor = ref.read(sessionControllerProvider).user;
+    if (actor == null) return;
+    final b64 = await ProofPhoto.capture();
+    if (b64 == null) return;
+    await ref
+        .read(deliveryRepositoryProvider)
+        .markDelivered(row, actor, proofPhotoB64: b64);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.t('photo_proof_saved'))),
+      );
+    }
+  }
+
+  Future<void> _changeQty(BuildContext context, WidgetRef ref) async {
+    final t = AppLocalizations.of(context);
+    final qtyC = TextEditingController(text: row.plannedQuantity.toString());
     final reasonC = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -247,8 +594,10 @@ class _DeliveryRow extends ConsumerWidget {
             TextField(
               controller: qtyC,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: t.t('change_qty_dialog')),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  InputDecoration(labelText: t.t('change_qty_dialog')),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -272,7 +621,7 @@ class _DeliveryRow extends ConsumerWidget {
     if (qty == null) return;
     final actor = ref.read(sessionControllerProvider).user!;
     final repo = ref.read(deliveryRepositoryProvider);
-    final updated = await repo.setQuantity(row!, actor, qty,
+    final updated = await repo.setQuantity(row, actor, qty,
         reason: reasonC.text.trim().isEmpty ? null : reasonC.text.trim());
     await repo.markDelivered(updated, actor,
         reason: reasonC.text.trim().isEmpty ? null : reasonC.text.trim());
@@ -371,8 +720,7 @@ class _OffTodayBanner extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(Icons.event_busy,
-                size: 32, color: scheme.onErrorContainer),
+            Icon(Icons.event_busy, size: 32, color: scheme.onErrorContainer),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -402,9 +750,8 @@ class _OffTodayBanner extends ConsumerWidget {
   Future<void> _undoOffToday(BuildContext context, WidgetRef ref) async {
     final actor = ref.read(sessionControllerProvider).user;
     if (actor == null) return;
-    // Find the absence that covers today and delete it.
-    final absences = await ref
-        .read(absencesForCurrentMilkmanProvider.future);
+    final absences =
+        await ref.read(absencesForCurrentMilkmanProvider.future);
     final today = AppDates.today();
     final todayKey = AppDates.dateKey(today);
     MilkmanAbsence? hit;
@@ -423,5 +770,108 @@ class _OffTodayBanner extends ConsumerWidget {
     if (hit != null) {
       await ref.read(absenceRepositoryProvider).delete(hit.id, actor);
     }
+  }
+}
+
+class _SummaryStrip extends ConsumerWidget {
+  const _SummaryStrip({required this.onQuickCommand});
+  final VoidCallback onQuickCommand;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final stats =
+        ref.watch(deliveryRepositoryProvider).dailyStats(AppDates.today());
+
+    Widget tile(
+      String title,
+      String value,
+      IconData icon,
+      Color color,
+      VoidCallback onTap,
+    ) =>
+        Expanded(
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(icon, size: 16, color: color),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tile(
+          t.t('todays_revenue'),
+          '₹${stats.revenue.toStringAsFixed(0)}',
+          Icons.trending_up,
+          Colors.green.shade700,
+          () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const DailyRevenueScreen(),
+          )),
+        ),
+        const SizedBox(width: 6),
+        tile(
+          t.t('tomorrows_inventory'),
+          '${stats.delivered}/${stats.delivered + stats.skipped}',
+          Icons.inventory_2_outlined,
+          Colors.indigo,
+          () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const InventoryScreen(),
+          )),
+        ),
+        const SizedBox(width: 6),
+        Card(
+          margin: EdgeInsets.zero,
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onQuickCommand,
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              child: Icon(
+                Icons.bolt,
+                size: 24,
+                color: Theme.of(context).colorScheme.onTertiaryContainer,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

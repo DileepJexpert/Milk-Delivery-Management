@@ -7,8 +7,12 @@ import '../data/models/change_request.dart';
 import '../data/models/daily_delivery.dart';
 import '../data/models/flat.dart';
 import '../data/models/milkman_absence.dart';
+import '../data/models/category.dart';
+import '../data/models/product.dart';
 import '../data/models/society.dart';
+import '../data/models/subscription.dart';
 import '../data/models/user.dart';
+import '../data/models/wallet_transaction.dart';
 import '../features/auth/session_controller.dart';
 import 'repository_providers.dart';
 
@@ -111,15 +115,26 @@ final isMilkmanAbsentTodayProvider = Provider<bool>((ref) {
 });
 
 /// For a subscriber: who is the milkman that owns my flat's society?
+/// For standalone customers (no society), falls back to the single milkman
+/// user in the system (the app is designed for a single milkman managing all
+/// their customers, so this is unambiguous).
 final milkmanForSubscriberProvider = Provider<AppUser?>((ref) {
   final flat = ref.watch(myFlatProvider);
   if (flat == null) return null;
-  final raw = LocalStore.instance.societies.get(flat.societyId);
-  if (raw is! Map) return null;
-  final society = Society.fromJson(raw);
-  final userRaw = LocalStore.instance.users.get(society.milkmanId);
-  if (userRaw is! Map) return null;
-  return AppUser.fromJson(userRaw);
+  if (!flat.isStandalone) {
+    final raw = LocalStore.instance.societies.get(flat.societyId);
+    if (raw is Map) {
+      final society = Society.fromJson(raw);
+      final userRaw = LocalStore.instance.users.get(society.milkmanId);
+      if (userRaw is Map) return AppUser.fromJson(userRaw);
+    }
+  }
+  // Fallback: pick the (single) milkman user in the store.
+  for (final raw in LocalStore.instance.users.values.whereType<Map>()) {
+    final u = AppUser.fromJson(raw);
+    if (u.role == UserRole.milkman) return u;
+  }
+  return null;
 });
 
 /// Is *the subscriber's* milkman off today?
@@ -131,4 +146,42 @@ final isMyMilkmanAbsentTodayProvider = Provider<bool>((ref) {
   return ref
       .watch(absenceRepositoryProvider)
       .isAbsentOn(AppDates.today(), milkman.id);
+});
+
+// ───────── Catalog / Subscriptions / Wallet ─────────
+
+final categoriesProvider = StreamProvider<List<ProductCategory>>((ref) {
+  return ref.watch(categoryRepositoryProvider).watchAll();
+});
+
+final productsProvider = StreamProvider<List<Product>>((ref) {
+  return ref.watch(productRepositoryProvider).watchAll();
+});
+
+final activeProductsProvider = StreamProvider<List<Product>>((ref) {
+  return ref.watch(productRepositoryProvider).watchActive();
+});
+
+final subscriptionsForFlatProvider =
+    StreamProvider.family<List<Subscription>, String>((ref, flatId) {
+  return ref.watch(subscriptionRepositoryProvider).watchForFlat(flatId);
+});
+
+final walletTxnsForFlatProvider =
+    StreamProvider.family<List<WalletTxn>, String>((ref, flatId) {
+  return ref.watch(walletRepositoryProvider).watchForFlat(flatId);
+});
+
+/// Subscriber's own subscriptions (matched via myFlatProvider).
+final mySubscriptionsProvider = StreamProvider<List<Subscription>>((ref) {
+  final flat = ref.watch(myFlatProvider);
+  if (flat == null) return const Stream.empty();
+  return ref.watch(subscriptionRepositoryProvider).watchForFlat(flat.id);
+});
+
+/// Subscriber's own wallet history.
+final myWalletTxnsProvider = StreamProvider<List<WalletTxn>>((ref) {
+  final flat = ref.watch(myFlatProvider);
+  if (flat == null) return const Stream.empty();
+  return ref.watch(walletRepositoryProvider).watchForFlat(flat.id);
 });

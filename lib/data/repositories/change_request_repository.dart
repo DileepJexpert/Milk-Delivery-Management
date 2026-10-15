@@ -112,23 +112,29 @@ class ChangeRequestRepository {
   Future<void> apply(ChangeRequest req, AppUser actor) async {
     final flat = _flats.byId(req.flatId);
     if (flat == null) return;
+    final subs = _deliveries.subscriptionsForFlat(flat.id);
+    if (subs.isEmpty) return;
     final from = AppDates.parseKey(req.fromDateKey);
     final to = AppDates.parseKey(req.toDateKey);
     var cursor = from;
     while (!cursor.isAfter(to)) {
-      final row = _deliveries.ensureForToday(flat, when: cursor);
-      switch (req.type) {
-        case ChangeRequestType.pause:
-          await _deliveries.markPaused(row, actor, reason: 'subscriber pause');
-          break;
-        case ChangeRequestType.quantityChange:
-          await _deliveries.setQuantity(
-            row,
-            actor,
-            req.newQuantity,
-            reason: 'subscriber quantity change',
-          );
-          break;
+      for (final sub in subs) {
+        final row =
+            _deliveries.ensureForSubscription(flat, sub, when: cursor);
+        switch (req.type) {
+          case ChangeRequestType.pause:
+            await _deliveries.markPaused(row, actor,
+                reason: 'subscriber pause');
+            break;
+          case ChangeRequestType.quantityChange:
+            await _deliveries.setQuantity(
+              row,
+              actor,
+              req.newQuantity,
+              reason: 'subscriber quantity change',
+            );
+            break;
+        }
       }
       cursor = cursor.add(const Duration(days: 1));
     }

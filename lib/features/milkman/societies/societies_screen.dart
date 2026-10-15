@@ -6,6 +6,7 @@ import '../../../providers/data_providers.dart';
 import '../../../providers/repository_providers.dart';
 import '../../auth/session_controller.dart';
 import 'society_detail_screen.dart';
+import 'standalone_customers_screen.dart';
 
 class SocietiesScreen extends ConsumerWidget {
   const SocietiesScreen({super.key});
@@ -13,38 +14,87 @@ class SocietiesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
-    final async = ref.watch(societiesForCurrentMilkmanProvider);
+    final societiesAsync = ref.watch(societiesForCurrentMilkmanProvider);
+    final flatsAsync = ref.watch(flatsForCurrentMilkmanProvider);
+    final standaloneCount = (flatsAsync.valueOrNull ?? const [])
+        .where((f) => f.isStandalone)
+        .length;
+
     return Scaffold(
-      body: async.when(
+      body: societiesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
         data: (rows) {
-          if (rows.isEmpty) {
-            return Center(child: Text(t.t('no_societies')));
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: rows.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) {
-              final s = rows[i];
-              return Card(
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+            children: [
+              // Standalone customers entry — always present so the milkman can
+              // add a customer without first creating a society.
+              Card(
                 child: ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.apartment)),
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer,
+                    child: Icon(Icons.home_outlined,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSecondaryContainer),
+                  ),
                   title: Text(
-                    s.name,
+                    t.t('standalone_customers'),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: Text(s.address),
+                  subtitle: Text(
+                    standaloneCount == 0
+                        ? t.t('standalone_explainer')
+                        : '$standaloneCount ${t.t('customers')}',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => SocietyDetailScreen(societyId: s.id),
+                      builder: (_) => const StandaloneCustomersScreen(),
                     ),
                   ),
                 ),
-              );
-            },
+              ),
+              const SizedBox(height: 16),
+              if (rows.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    t.t('no_societies'),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                  child: Text(
+                    t.t('societies'),
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                for (final s in rows)
+                  Card(
+                    child: ListTile(
+                      leading:
+                          const CircleAvatar(child: Icon(Icons.apartment)),
+                      title: Text(
+                        s.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(s.address),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SocietyDetailScreen(societyId: s.id),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ],
           );
         },
       ),

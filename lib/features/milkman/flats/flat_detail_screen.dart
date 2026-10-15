@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +11,8 @@ import '../../../data/models/flat.dart';
 import '../../../providers/data_providers.dart';
 import '../../../providers/repository_providers.dart';
 import '../../auth/session_controller.dart';
+import 'subscriptions_screen.dart';
+import 'wallet_screen.dart';
 
 class FlatDetailScreen extends ConsumerStatefulWidget {
   const FlatDetailScreen({super.key, required this.flatId});
@@ -21,6 +25,17 @@ class FlatDetailScreen extends ConsumerStatefulWidget {
 
 class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
   // ── Record a one-off quantity change for a specific date ──────────────────
+  void _showPhoto(BuildContext context, String b64) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        child: InteractiveViewer(
+          child: Image.memory(base64Decode(b64)),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showRecordChangeDialog() async {
     final t = AppLocalizations.of(context);
     final flat = ref.read(flatRepositoryProvider).byId(widget.flatId);
@@ -82,8 +97,15 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
     final reason = reasonCtrl.text.trim().isEmpty ? null : reasonCtrl.text.trim();
     final actor = ref.read(sessionControllerProvider).user!;
     final deliveryRepo = ref.read(deliveryRepositoryProvider);
-    final row = deliveryRepo.ensureForToday(flat, when: selectedDate);
-    await deliveryRepo.setQuantity(row, actor, newQty, reason: reason);
+    // Apply to all active subscriptions on this flat for the chosen date. Most
+    // flats have a single (cow milk) subscription; for multi-product flats the
+    // milkman can fine-tune from Today's Route instead.
+    final subs = deliveryRepo.subscriptionsForFlat(flat.id);
+    for (final sub in subs) {
+      final row =
+          deliveryRepo.ensureForSubscription(flat, sub, when: selectedDate);
+      await deliveryRepo.setQuantity(row, actor, newQty, reason: reason);
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(t.t('change_recorded'))),
@@ -97,6 +119,8 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
     final flatNoCtrl = TextEditingController(text: flat.flatNumber);
     final ownerCtrl = TextEditingController(text: flat.ownerName);
     final phoneCtrl = TextEditingController(text: flat.ownerPhone);
+    final addressCtrl =
+        TextEditingController(text: flat.addressLine ?? '');
     final qtyCtrl = TextEditingController(text: flat.defaultQuantity.toString());
     final priceCtrl = TextEditingController(text: flat.pricePerLitre.toString());
     bool hasApp = flat.hasApp;
@@ -124,6 +148,14 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
                   decoration: InputDecoration(labelText: t.t('owner_phone')),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: addressCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: t.t('address_optional'),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -163,6 +195,9 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
           ownerName: ownerCtrl.text.trim().isEmpty ? null : ownerCtrl.text.trim(),
           ownerPhone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
           hasApp: hasApp,
+          addressLine: addressCtrl.text.trim().isEmpty
+              ? null
+              : addressCtrl.text.trim(),
           defaultQuantity: double.tryParse(qtyCtrl.text),
           pricePerLitre: double.tryParse(priceCtrl.text),
         );
@@ -260,7 +295,9 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Flat ${flat.flatNumber} — ${flat.ownerName}'),
+        title: Text(flat.isStandalone
+            ? '${flat.flatNumber} — ${flat.ownerName}'
+            : 'Flat ${flat.flatNumber} — ${flat.ownerName}'),
         actions: [
           IconButton(
             tooltip: t.t('edit_flat'),
@@ -283,6 +320,44 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
           _StatusCard(flat: flat, onPause: _pauseFlat, onResume: _resumeFlat, onStop: _stopFlat),
           const SizedBox(height: 12),
 
+          // ── Subscriptions + Wallet quick nav ─────────────────────────────
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.subscriptions_outlined),
+                  title: Text(t.t('manage_subscriptions')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SubscriptionsScreen(flatId: flat.id),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.account_balance_wallet_outlined),
+                  title: Text(t.t('wallet')),
+                  subtitle: Text(
+                    '${t.t('wallet_balance')}: ₹${flat.walletBalance.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: flat.walletBalance < 0 ? Colors.red : null,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => WalletScreen(flatId: flat.id),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                _BillingModeRow(flat: flat),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // ── Info card ────────────────────────────────────────────────────
           Card(
             child: Padding(
@@ -291,6 +366,8 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _InfoRow(label: t.t('owner_phone'), value: flat.ownerPhone),
+                  if (flat.addressLine != null && flat.addressLine!.isNotEmpty)
+                    _InfoRow(label: t.t('address'), value: flat.addressLine!),
                   _InfoRow(label: t.t('default_quantity'), value: '${flat.defaultQuantity}L/day'),
                   _InfoRow(label: t.t('price_per_litre'), value: '₹${flat.pricePerLitre.toStringAsFixed(2)}/L'),
                   _InfoRow(label: 'App', value: flat.hasApp ? 'Yes' : 'No'),
@@ -317,7 +394,30 @@ class _FlatDetailScreenState extends ConsumerState<FlatDetailScreen> {
                       color: r.status == DeliveryStatus.delivered ? Colors.green : Colors.orange,
                     ),
                     title: Text(r.dateKey),
-                    trailing: Text('${r.actualQuantity}L'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (r.proofPhotoB64 != null &&
+                            r.proofPhotoB64!.isNotEmpty)
+                          GestureDetector(
+                            onTap: () => _showPhoto(context, r.proofPhotoB64!),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(4),
+                                image: DecorationImage(
+                                  image: MemoryImage(
+                                      base64Decode(r.proofPhotoB64!)),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Text('${r.actualQuantity}L'),
+                      ],
+                    ),
                     subtitle: Text(r.status.name),
                   ),
               ],
@@ -592,5 +692,53 @@ class _AuditTile extends StatelessWidget {
       default:
         return t.name;
     }
+  }
+}
+
+class _BillingModeRow extends ConsumerWidget {
+  const _BillingModeRow({required this.flat});
+  final Flat flat;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.receipt_long_outlined),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t.t('billing_mode'),
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 4),
+                SegmentedButton<BillingMode>(
+                  segments: [
+                    ButtonSegment(
+                      value: BillingMode.prepaid,
+                      label: Text(t.t('billing_prepaid')),
+                    ),
+                    ButtonSegment(
+                      value: BillingMode.postpaid,
+                      label: Text(t.t('billing_postpaid')),
+                    ),
+                  ],
+                  selected: {flat.billingMode},
+                  onSelectionChanged: (s) async {
+                    final actor = ref.read(sessionControllerProvider).user!;
+                    await ref
+                        .read(flatRepositoryProvider)
+                        .setBillingMode(flat, actor, s.first);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

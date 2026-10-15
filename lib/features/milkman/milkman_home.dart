@@ -49,7 +49,7 @@ class _MilkmanHomeState extends ConsumerState<MilkmanHome> {
         );
 
     final initial =
-        (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : '?';
+        user.name.isNotEmpty ? user.name[0].toUpperCase() : '?';
 
     return Scaffold(
       appBar: AppBar(
@@ -71,7 +71,7 @@ class _MilkmanHomeState extends ConsumerState<MilkmanHome> {
                 ),
               ),
               child: Tooltip(
-                message: '${user?.name ?? ''} · ${user?.phone ?? ''}',
+                message: '${user.name} · ${user.phone}',
                 child: CircleAvatar(
                   backgroundColor:
                       Theme.of(context).colorScheme.primaryContainer,

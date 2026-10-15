@@ -34,15 +34,15 @@ class MilkmanAbsence {
 
   factory MilkmanAbsence.fromJson(Map json) => MilkmanAbsence(
         id: json['id'] as String,
-        milkmanId: json['milkmanId'] as String,
-        fromDateKey: json['fromDateKey'] as String,
-        toDateKey: json['toDateKey'] as String,
+        milkmanId: (json['milkmanId'] ?? json['milkman_id']) as String,
+        fromDateKey: (json['fromDateKey'] ?? json['from_date_key'] ?? json['date_key'] ?? json['start_date'] ?? '') as String,
+        toDateKey: (json['toDateKey'] ?? json['to_date_key'] ?? json['date_key'] ?? json['end_date'] ?? '') as String,
         reason: json['reason'] as String?,
-        isRecurring: json['isRecurring'] as bool? ?? false,
-        recurringDayOfWeek: json['recurringDayOfWeek'] as int?,
-        notifiedAt: json['notifiedAt'] == null
+        isRecurring: json['isRecurring'] == true || json['type'] == 'recurringDayOfWeek',
+        recurringDayOfWeek: (json['recurringDayOfWeek'] ?? json['day_of_week']) as int?,
+        notifiedAt: (json['notifiedAt'] ?? json['created_at']) == null
             ? null
-            : DateTime.parse(json['notifiedAt'] as String),
+            : DateTime.parse((json['notifiedAt'] ?? json['created_at']) as String),
       );
 
   MilkmanAbsence copyWith({DateTime? notifiedAt}) => MilkmanAbsence(

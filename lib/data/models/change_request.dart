@@ -48,19 +48,25 @@ class ChangeRequest {
 
   factory ChangeRequest.fromJson(Map json) => ChangeRequest(
         id: json['id'] as String,
-        flatId: json['flatId'] as String,
-        requestedByUserId: json['requestedByUserId'] as String,
-        requestedByName: json['requestedByName'] as String,
-        requestedByPhone: json['requestedByPhone'] as String,
-        type: ChangeRequestType.values
-            .firstWhere((t) => t.name == json['type']),
-        fromDateKey: json['fromDateKey'] as String,
-        toDateKey: json['toDateKey'] as String,
-        newQuantity: (json['newQuantity'] as num).toDouble(),
-        status: ChangeRequestStatus.values
-            .firstWhere((s) => s.name == json['status']),
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        note: json['note'] as String?,
+        flatId: (json['flatId'] ?? json['flat_id']) as String,
+        requestedByUserId: (json['requestedByUserId'] ?? json['requested_by_user_id'] ?? '') as String,
+        requestedByName: (json['requestedByName'] ?? json['requested_by_name'] ?? '') as String,
+        requestedByPhone: (json['requestedByPhone'] ?? json['requested_by_phone'] ?? '') as String,
+        type: ChangeRequestType.values.firstWhere(
+          (t) => t.name == json['type'],
+          orElse: () => ChangeRequestType.pause,
+        ),
+        fromDateKey: (json['fromDateKey'] ?? json['from_date_key'] ?? json['start_date'] ?? '') as String,
+        toDateKey: (json['toDateKey'] ?? json['to_date_key'] ?? json['end_date'] ?? '') as String,
+        newQuantity: ((json['newQuantity'] ?? json['new_quantity'] ?? json['requested_quantity'] ?? 0) as num).toDouble(),
+        status: ChangeRequestStatus.values.firstWhere(
+          (s) => s.name == json['status'],
+          orElse: () => ChangeRequestStatus.pending,
+        ),
+        createdAt: (json['createdAt'] ?? json['created_at']) == null
+            ? DateTime.now()
+            : DateTime.parse((json['createdAt'] ?? json['created_at']) as String),
+        note: (json['note'] ?? json['reason']) as String?,
       );
 
   ChangeRequest copyWith({ChangeRequestStatus? status}) => ChangeRequest(

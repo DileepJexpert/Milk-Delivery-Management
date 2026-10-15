@@ -32,17 +32,17 @@ class DailyDelivery {
 
   factory DailyDelivery.fromJson(Map json) => DailyDelivery(
         id: json['id'] as String,
-        flatId: json['flatId'] as String,
-        dateKey: json['dateKey'] as String,
-        plannedQuantity: (json['plannedQuantity'] as num).toDouble(),
-        actualQuantity: (json['actualQuantity'] as num).toDouble(),
+        flatId: (json['flatId'] ?? json['flat_id']) as String,
+        dateKey: (json['dateKey'] ?? json['date_key']) as String,
+        plannedQuantity: ((json['plannedQuantity'] ?? json['planned_quantity']) as num).toDouble(),
+        actualQuantity: ((json['actualQuantity'] ?? json['actual_quantity']) as num).toDouble(),
         status: DeliveryStatus.values.firstWhere(
           (s) => s.name == json['status'],
           orElse: () => DeliveryStatus.pending,
         ),
-        deliveredAt: json['deliveredAt'] == null
+        deliveredAt: (json['deliveredAt'] ?? json['delivered_at']) == null
             ? null
-            : DateTime.parse(json['deliveredAt'] as String),
+            : DateTime.parse((json['deliveredAt'] ?? json['delivered_at']) as String),
       );
 
   DailyDelivery copyWith({

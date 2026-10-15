@@ -62,7 +62,7 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
                             style: Theme.of(context).textTheme.labelLarge),
                         const SizedBox(height: 4),
                         SelectableText(
-                          user?.phone ?? '',
+                          user.phone,
                           style: Theme.of(context)
                               .textTheme
                               .headlineMedium
@@ -70,9 +70,7 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
-                          onPressed: user == null
-                              ? null
-                              : () async {
+                          onPressed: () async {
                                   await Clipboard.setData(
                                       ClipboardData(text: user.phone));
                                   if (context.mounted) {

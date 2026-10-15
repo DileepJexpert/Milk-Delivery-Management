@@ -9,6 +9,7 @@ class SyncQueue {
   static final SyncQueue instance = SyncQueue._();
 
   static const _uuid = Uuid();
+  static void Function()? onEnqueue;
 
   Future<void> enqueue(String op, String collection, Map data) async {
     final id = _uuid.v4();
@@ -19,6 +20,7 @@ class SyncQueue {
       'data': Map<String, dynamic>.from(data),
       'createdAt': DateTime.now().toIso8601String(),
     });
+    onEnqueue?.call();
   }
 
   Iterable<Map> pending() => LocalStore.instance.syncQueue.values

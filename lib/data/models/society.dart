@@ -20,7 +20,7 @@ class Society {
 
   factory Society.fromJson(Map json) => Society(
         id: json['id'] as String,
-        milkmanId: json['milkmanId'] as String,
+        milkmanId: (json['milkmanId'] ?? json['milkman_id']) as String,
         name: json['name'] as String,
         address: (json['address'] ?? '') as String,
       );

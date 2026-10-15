@@ -10,12 +10,14 @@ import 'features/auth/session_controller.dart';
 import 'features/milkman/milkman_home.dart';
 import 'features/subscriber/subscriber_home.dart';
 import 'data/models/user.dart';
+import 'providers/repository_providers.dart';
 
 class MilkDeliveryApp extends ConsumerWidget {
   const MilkDeliveryApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(remoteSyncProvider);
     final locale = ref.watch(localeControllerProvider);
     final session = ref.watch(sessionControllerProvider);
 

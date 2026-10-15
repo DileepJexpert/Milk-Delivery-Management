@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/utils/upi_payment.dart';
 import '../../../data/local/local_store.dart';
 import '../../../data/models/user.dart';
 import '../../auth/session_controller.dart';
@@ -18,19 +19,45 @@ class MilkmanProfileScreen extends ConsumerStatefulWidget {
 
 class _MilkmanProfileScreenState extends ConsumerState<MilkmanProfileScreen> {
   late TextEditingController _nameController;
+  late TextEditingController _upiController;
   bool _editing = false;
+  bool _editingUpi = false;
 
   @override
   void initState() {
     super.initState();
     final user = ref.read(sessionControllerProvider).user;
     _nameController = TextEditingController(text: user?.name ?? '');
+    _upiController = TextEditingController(
+      text: LocalStore.instance.settings.get('custom_upi_vpa') as String? ??
+          UpiPayment.defaultVpa,
+    );
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _upiController.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveUpi() async {
+    final newUpi = _upiController.text.trim();
+    if (newUpi.isEmpty || !newUpi.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid UPI ID (e.g. mobile@upi)'),
+        ),
+      );
+      return;
+    }
+    await LocalStore.instance.settings.put('custom_upi_vpa', newUpi);
+    setState(() => _editingUpi = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('UPI ID updated to $newUpi')),
+      );
+    }
   }
 
   Future<void> _saveName(AppUser user) async {
@@ -199,6 +226,99 @@ class _MilkmanProfileScreenState extends ConsumerState<MilkmanProfileScreen> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // UPI ID for Payments
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('UPI ID for Receiving Payments',
+                          style: Theme.of(context).textTheme.labelMedium),
+                      if (!_editingUpi)
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 18),
+                          tooltip: 'Edit UPI ID',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => setState(() => _editingUpi = true),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  if (_editingUpi)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _upiController,
+                            autofocus: true,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. mobile@upi or name@bank',
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: _saveUpi,
+                          child: Text(t.t('save')),
+                        ),
+                        const SizedBox(width: 4),
+                        OutlinedButton(
+                          onPressed: () {
+                            _upiController.text = LocalStore.instance.settings.get('custom_upi_vpa') as String? ??
+                                UpiPayment.defaultVpa;
+                            setState(() => _editingUpi = false);
+                          },
+                          child: Text(t.t('cancel')),
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        const Icon(Icons.qr_code_2, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _upiController.text,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: t.t('copy'),
+                          icon: const Icon(Icons.copy_outlined, size: 18),
+                          onPressed: () async {
+                            await Clipboard.setData(
+                                ClipboardData(text: _upiController.text));
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(t.t('copied'))),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Used to generate dynamic QR codes and direct payment links on monthly invoices.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
                   ),
                 ],
               ),

@@ -8,6 +8,7 @@ import '../../data/models/flat.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/repository_providers.dart';
 import '../auth/session_controller.dart';
+import 'widgets/farm_pantry_cross_sell.dart';
 
 class TodayScreen extends ConsumerWidget {
   const TodayScreen({super.key});
@@ -67,6 +68,8 @@ class TodayScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         if (!milkmanOff) _ActionGrid(flat: flat),
+        const SizedBox(height: 24),
+        FarmPantryCrossSell(flat: flat),
       ],
     );
   }

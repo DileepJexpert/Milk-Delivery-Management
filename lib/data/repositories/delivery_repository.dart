@@ -229,6 +229,15 @@ class DeliveryRepository {
     return updated;
   }
 
+  Future<DailyDelivery> updateNotes(
+    DailyDelivery row,
+    String notes,
+  ) async {
+    final updated = row.copyWith(notes: notes);
+    await _persist(updated);
+    return updated;
+  }
+
   Future<void> _persist(DailyDelivery d) async {
     await LocalStore.instance.deliveries.put(d.id, d.toJson());
     await SyncQueue.instance.enqueue('upsert', 'deliveries', d.toJson());

@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/upi_payment.dart';
 import '../../../core/utils/whatsapp.dart';
+import '../../../core/utils/whatsapp_templates.dart';
+import '../../../data/local/local_store.dart';
 import '../../../data/models/flat.dart';
 import '../../../data/repositories/delivery_repository.dart';
 import '../../../providers/data_providers.dart';
@@ -136,12 +139,20 @@ class _BillCard extends ConsumerWidget {
                   label: Text(t.t('export_pdf')),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => WhatsAppLink.send(
-                    flat.ownerPhone,
-                    'Hi ${flat.ownerName}, your milk bill for '
-                    '${month.year}-${month.month.toString().padLeft(2, '0')}: '
-                    '${summary.totalLitres}L = ₹${summary.amountDue.toStringAsFixed(2)}',
-                  ),
+                  onPressed: () {
+                    final monthLabel = AppDates.monthLabel(month, locale: Localizations.localeOf(context).languageCode);
+                    final upiVpa = LocalStore.instance.settings.get('custom_upi_vpa') as String? ?? UpiPayment.defaultVpa;
+                    final msg = WhatsAppTemplates.monthlyBillNotice(
+                      ownerName: flat.ownerName,
+                      flatNumber: flat.flatNumber,
+                      month: monthLabel,
+                      amount: summary.amountDue,
+                      daysDelivered: summary.daysDelivered,
+                      totalLitres: summary.totalLitres,
+                      upiVpa: upiVpa,
+                    );
+                    WhatsAppLink.send(flat.ownerPhone, msg);
+                  },
                   icon: const Icon(Icons.send_outlined),
                   label: Text(t.t('whatsapp_notify')),
                 ),

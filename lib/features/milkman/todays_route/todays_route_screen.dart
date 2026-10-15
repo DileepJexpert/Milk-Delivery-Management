@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/whatsapp.dart';
+import '../../../core/utils/whatsapp_templates.dart';
 import '../../../data/models/daily_delivery.dart';
 import '../../../data/models/flat.dart';
 import '../../../data/models/milkman_absence.dart';
@@ -154,6 +155,24 @@ class _DeliveryRow extends ConsumerWidget {
                         : '${t.t('qty_label')}: ${planned}L',
                     style: TextStyle(color: _statusColor(context, status)),
                   ),
+                  if (row?.notes != null && row!.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '🏷️ ${row!.notes!}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -163,7 +182,7 @@ class _DeliveryRow extends ConsumerWidget {
               style: FilledButton.styleFrom(
                 minimumSize: const Size(110, 48),
                 backgroundColor: status == DeliveryStatus.delivered
-                    ? Colors.green.withOpacity(0.2)
+                    ? Colors.green.withValues(alpha: 0.2)
                     : null,
               ),
               onPressed: row == null
@@ -191,16 +210,22 @@ class _DeliveryRow extends ConsumerWidget {
               icon: const Icon(Icons.cancel_outlined),
             ),
             const SizedBox(width: 4),
-            if (!flat.hasApp)
-              IconButton(
-                tooltip: t.t('whatsapp_notify'),
-                color: Colors.green.shade700,
-                icon: const Icon(Icons.send_outlined),
-                onPressed: () => WhatsAppLink.send(
-                  flat.ownerPhone,
-                  'Hi ${flat.ownerName}, today\'s milk: ${qty}L delivered.',
-                ),
-              ),
+            IconButton(
+              tooltip: t.t('whatsapp_notify'),
+              color: Colors.green.shade700,
+              icon: const Icon(Icons.send_outlined),
+              onPressed: () {
+                final time = TimeOfDay.fromDateTime(row?.deliveredAt ?? DateTime.now()).format(context);
+                final msg = WhatsAppTemplates.morningDeliveryAlert(
+                  ownerName: flat.ownerName,
+                  flatNumber: flat.flatNumber,
+                  quantity: qty > 0 ? qty : planned,
+                  time: time,
+                  notes: row?.notes,
+                );
+                WhatsAppLink.send(flat.ownerPhone, msg);
+              },
+            ),
           ],
         ),
       ),

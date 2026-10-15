@@ -22,12 +22,17 @@ android/key.properties
 **/android/gradlew
 **/android/gradlew.bat
 **/android/gradle/wrapper/gradle-wrapper.jar
+android/app/src/main/java/io/flutter/plugins/
 
 # iOS
 ios/Pods/
 ios/.symlinks/
 ios/Flutter/Flutter.framework/
 ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/ephemeral/
+ios/Runner/GeneratedPluginRegistrant.*
 ios/Runner/GoogleService-Info.plist
 ios/Runner.xcworkspace/xcuserdata/
 ios/Runner.xcodeproj/xcuserdata/

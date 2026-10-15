@@ -30,7 +30,7 @@ class _MilkmanHomeState extends ConsumerState<MilkmanHome> {
     // tab screens (which use `user!`) don't rebuild against a null user
     // and trigger a cascade of layout / null-assertion failures.
     if (user == null) return const Scaffold(body: SizedBox.shrink());
-    final pages = const [
+    const pages = [
       TodaysRouteScreen(),
       SocietiesScreen(),
       ChangeRequestsScreen(),

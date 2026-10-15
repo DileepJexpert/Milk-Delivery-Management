@@ -189,9 +189,9 @@ class _FlatTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: chipColor.withOpacity(0.15),
+                  color: chipColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: chipColor.withOpacity(0.5)),
+                  border: Border.all(color: chipColor.withValues(alpha: 0.5)),
                 ),
                 child: Text(
                   chipLabel,

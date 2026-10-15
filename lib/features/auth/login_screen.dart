@@ -129,12 +129,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Text(_error!, style: const TextStyle(color: Colors.red)),
                 ],
                 const SizedBox(height: 32),
-                Card(
+                const Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Text('Demo accounts',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                         SizedBox(height: 6),

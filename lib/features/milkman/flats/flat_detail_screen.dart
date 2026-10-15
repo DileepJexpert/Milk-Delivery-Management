@@ -515,7 +515,7 @@ class _AuditTile extends StatelessWidget {
       child: ListTile(
         leading: CircleAvatar(
           radius: 16,
-          backgroundColor: color.withOpacity(0.15),
+          backgroundColor: color.withValues(alpha: 0.15),
           child: Icon(_typeIcon(a.changeType), color: color, size: 16),
         ),
         title: Text(_typeLabel(a.changeType, t)),

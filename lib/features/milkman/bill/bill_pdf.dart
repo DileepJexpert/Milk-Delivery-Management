@@ -34,7 +34,7 @@ class BillPdf {
               pw.Text('Phone: ${flat.ownerPhone}'),
               if (society != null) pw.Text('Society: ${society.name}'),
               pw.SizedBox(height: 16),
-              pw.Table.fromTextArray(
+              pw.TableHelper.fromTextArray(
                 headers: const ['Metric', 'Value'],
                 data: [
                   ['Days delivered (billable)',
@@ -46,7 +46,7 @@ class BillPdf {
                   ['Days with custom qty', '${summary.daysCustom}'],
                   ['Total litres delivered', '${summary.totalLitres}L'],
                   ['Price per litre',
-                      '${summary.pricePerLitre.toStringAsFixed(2)}'],
+                      summary.pricePerLitre.toStringAsFixed(2)],
                 ],
               ),
               pw.SizedBox(height: 16),

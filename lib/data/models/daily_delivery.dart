@@ -9,6 +9,7 @@ class DailyDelivery {
     required this.actualQuantity,
     required this.status,
     this.deliveredAt,
+    this.notes,
   });
 
   final String id;
@@ -19,6 +20,7 @@ class DailyDelivery {
   final double actualQuantity;
   final DeliveryStatus status;
   final DateTime? deliveredAt;
+  final String? notes;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -28,6 +30,7 @@ class DailyDelivery {
         'actualQuantity': actualQuantity,
         'status': status.name,
         'deliveredAt': deliveredAt?.toIso8601String(),
+        'notes': notes,
       };
 
   factory DailyDelivery.fromJson(Map json) => DailyDelivery(
@@ -43,6 +46,7 @@ class DailyDelivery {
         deliveredAt: (json['deliveredAt'] ?? json['delivered_at']) == null
             ? null
             : DateTime.parse((json['deliveredAt'] ?? json['delivered_at']) as String),
+        notes: json['notes'] as String?,
       );
 
   DailyDelivery copyWith({
@@ -50,6 +54,7 @@ class DailyDelivery {
     double? actualQuantity,
     DeliveryStatus? status,
     DateTime? deliveredAt,
+    String? notes,
   }) =>
       DailyDelivery(
         id: id,
@@ -59,5 +64,6 @@ class DailyDelivery {
         actualQuantity: actualQuantity ?? this.actualQuantity,
         status: status ?? this.status,
         deliveredAt: deliveredAt ?? this.deliveredAt,
+        notes: notes ?? this.notes,
       );
 }

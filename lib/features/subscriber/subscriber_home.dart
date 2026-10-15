@@ -99,7 +99,7 @@ class _SubscriberHomeState extends ConsumerState<SubscriberHome> {
       );
     }
 
-    final pages = const [
+    const pages = [
       TodayScreen(),
       HistoryScreen(),
       BillScreen(),
